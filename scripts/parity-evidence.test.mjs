@@ -47,7 +47,7 @@ function context({ outcomes = {}, scenarios = {} } = {}) {
   return {
     testOutcomes: new Map(Object.entries(outcomes)),
     acceptance: {
-      commit: 'd472208f2d96',
+      commit: 'c10bfbe6f0af',
       scenarios: new Map(Object.entries(scenarios)),
     },
   };
@@ -213,7 +213,7 @@ test('results fill both registries, interfaces rows share a parity result, and s
   const evaluated = evaluateAll(parity, interfaces, entries, ctx);
   assert.deepEqual(evaluated.parity.get('a.md:1'), {
     result: RESULT.pass,
-    evidence: 'unit src/a.test.mjs::ok; qa good, прогон d472208f',
+    evidence: 'unit src/a.test.mjs::ok; qa good, прогон c10bfbe6',
   });
   assert.equal(evaluated.parity.get('a.md:2').result, RESULT.paid);
   assert.deepEqual(evaluated.parity.get('a.md:3'), {

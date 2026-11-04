@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "status": "native-baseline-and-idle-fix-only",
-  "parent": "a78d5e82290fb614ec5f8f77770a428d8d535cf7",
+  "parent": "20ede576d0e927ad90b9b044f902fb87ca55a56f",
   "renderer": "cesium",
   "navaraAccepted": false,
   "waveAccepted": false,

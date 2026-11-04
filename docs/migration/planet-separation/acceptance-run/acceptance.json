@@ -1,5 +1,5 @@
 {
-  "commit": "e9aa85ce1c04d95a17278cd69d0f893ddca16ccb",
+  "commit": "584821efa3325db3bb2e6346d9ef10a58cb65eb5",
   "dirty": false,
   "dirtyFiles": [],
   "dirtyFilesAtEnd": [],
@@ -10,7 +10,7 @@
   "baseUrl": "http://127.0.0.1:4208",
   "preview": {
     "servedByRunner": true,
-    "appCommit": "e9aa85ce1c04d95a17278cd69d0f893ddca16ccb",
+    "appCommit": "584821efa3325db3bb2e6346d9ef10a58cb65eb5",
     "appCheckoutClean": true,
     "scenariosFrom": "the same clean checkout",
     "envFilesInCheckout": [],

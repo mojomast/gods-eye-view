@@ -6,7 +6,7 @@ The optimization reduces median uncapped Navara work p95 from **18.1 to 14.6 ms 
 
 The previous report's 15.7 ms Navara / 4.2 ms Cesium result was a different session. Against that historical number the reduction is only **7.0%**, from 3.738× to 3.476×. Do not substitute the fresh 18.1 ms control for the historical result or describe the 19.3% as a controlled cross-day improvement. All three fresh optimized samples are faster than all three fresh original-pipeline samples, but the run order and desktop-load variation limit causal precision.
 
-Runtime commit: `ff1a9d463a1f37d97377613abfa17deeb10684f0`. Dioxus, app defaults, SDK files and upstream branches are unchanged. All work and commits are local.
+Runtime commit: `a35f052c783313b8c41a614971c4a015acfbb87a`. Dioxus, app defaults, SDK files and upstream branches are unchanged. All work and commits are local.
 
 ## What was expensive
 
