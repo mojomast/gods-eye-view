@@ -172,7 +172,12 @@ it, or the camera when nothing is followed or the entity is not there yet,
 since a camera flight would end the follow; then cockpit view when asked) and
 answers `{ type: 'gev:view-applied', id, ok, steps }` to the origin that
 sent the view. It posts `{ type: 'gev:ready' }` once it can take views, and
-only its parent page can send them. See `src/app/embed.js`.
+only its parent page can send them. `{ type: 'gev:visibility', visible }`
+pauses or resumes the render loop, HUD timers and feed polls, including when
+the pane is covered but the document still looks visible. Client keys and an
+optional `perf=embed` profile load from `config.json`,
+`window.GEV_RUNTIME_CONFIG` or `{ type: 'gev:config', ... }` without a rebuild.
+See `src/app/embed.js` and `docs/EMBEDDING.md`.
 
 No page may frame the app by default: every document keeps
 `X-Frame-Options: DENY` and `frame-ancestors 'none'`. Setting
