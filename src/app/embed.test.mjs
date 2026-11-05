@@ -414,6 +414,52 @@ test('a host visibility message pauses background work and is acknowledged', asy
   }
 });
 
+test('gev:recreate answers after the replacement viewer renders', async () => {
+  const posted = [];
+  const parent = {
+    postMessage: (message) => posted.push(message),
+  };
+  const windowRef = new EventTarget();
+  windowRef.parent = parent;
+  windowRef.document = {
+    hidden: false,
+    body: { classList: new Set() },
+  };
+  windowRef.document.body.classList.add = Set.prototype.add;
+  const shell = {
+    initialRestorePromise: Promise.resolve(),
+    setCleanView() {},
+  };
+  let calls = 0;
+  const remove = installViews({
+    shell,
+    viewer: fakeViewer(),
+    dataManager: fakeLayers(new Set()),
+    run: recorder().run,
+    location: { search: '?embed=1', hash: '' },
+    windowRef,
+    recreateViewer: async () => {
+      calls += 1;
+      return { id: 'next' };
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const event = new Event('message');
+  Object.assign(event, {
+    source: parent,
+    origin: 'https://host.example',
+    data: { type: 'gev:recreate' },
+  });
+  windowRef.dispatchEvent(event);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(calls, 1);
+  assert.deepEqual(posted.at(-1), {
+    type: 'gev:recreate-applied',
+    ok: true,
+  });
+  remove();
+});
+
 test('a panel keeps drawing from a timer while animation frames stop', () => {
   let clock = 0;
   let tick = null;

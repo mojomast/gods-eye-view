@@ -1,3 +1,4 @@
+import { createLiveViewer } from '../app/webglRecovery.js';
 import { toFunctionOutput } from '../tools/functions.js';
 import { GEV_ACTION_SCHEMAS } from './actionSchemas.js';
 import { createGevActionRunner } from './gevActions.js';
@@ -27,43 +28,63 @@ export function withToolCatalog(runner, loadCatalog) {
   runGevTool.resetConversation = (...args) =>
     runner.resetConversation?.(...args);
   runGevTool.dispose = (...args) => runner.dispose?.(...args);
+  runGevTool.rebindViewer = (...args) => runner.rebindViewer?.(...args);
   return runGevTool;
 }
 
 /** Compose the standalone action runner with the voice controls. */
 export function initGevVoiceCommands(options) {
-  const canvas = options.viewer?.scene?.canvas || null;
-  const cameraKey = () => cameraPoseKey(options.viewer);
+  const live = createLiveViewer(options.viewer);
+  const viewer = live.proxy;
+  const bound = { ...options, viewer };
+  const cameraKey = () => cameraPoseKey(viewer);
   // Point-and-ask: the tracker and referents are shared by the runner (which
   // resolves 'pointer' and referent:n) and the controls (which snapshot the
   // pointer at turn start and clear both when the session ends).
-  const pointer = canvas
-    ? createPointerTracker({
-        element: canvas,
-        cameraKey,
-        pick: createPointerPicker({
-          viewer: options.viewer,
-          dataManager: options.dataManager,
-        }),
-      })
-    : null;
+  const pointerFor = (target) => {
+    const canvas = target?.scene?.canvas || null;
+    return canvas
+      ? createPointerTracker({
+          element: canvas,
+          cameraKey,
+          pick: createPointerPicker({
+            viewer,
+            dataManager: options.dataManager,
+          }),
+        })
+      : null;
+  };
+  let pointer = pointerFor(viewer);
   const referents = createReferentRegistry();
   // The controller exists only after the runner, so its hooks bind late.
   const deixis = { pointer, referents, cameraKey };
   let commands;
+  const runner = withToolCatalog(
+    createGevActionRunner({
+      ...bound,
+      deixis,
+      readVoicePanelOperation: () => commands?.captureVoicePanelOperation?.(),
+    }),
+    options.toolCatalog,
+  );
   commands = createVoiceCommands({
-    ...options,
+    ...bound,
     pointer,
     referents,
-    runner: withToolCatalog(
-      createGevActionRunner({
-        ...options,
-        deixis,
-        readVoicePanelOperation: () => commands?.captureVoicePanelOperation?.(),
-      }),
-      options.toolCatalog,
-    ),
+    runner,
   });
+  commands.rebindViewer = (next) => {
+    live.slot.current = next;
+    const canvas = next?.scene?.canvas || null;
+    if (pointer?.retarget && canvas) pointer.retarget(canvas);
+    else {
+      pointer?.destroy?.();
+      pointer = pointerFor(next);
+      deixis.pointer = pointer;
+      commands.pointer = pointer;
+    }
+    runner.rebindViewer?.();
+  };
   deixis.imageFrame = () => commands.retainedImageFrame?.() || null;
   deixis.onPointerUsed = () => commands.announcePointer?.();
   const lifetime = commands.signal ?? commands.session?.signal;

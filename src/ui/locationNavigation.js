@@ -40,6 +40,10 @@ export class LocationNavigation {
       { emitCurrent: false },
     );
   }
+  adoptViewer(viewer) {
+    this.viewer = viewer;
+    if (this.orbitController) this.orbitController.viewer = viewer;
+  }
   get cockpitView() {
     return this.readCockpit();
   }

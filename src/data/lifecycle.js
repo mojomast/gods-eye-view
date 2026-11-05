@@ -283,6 +283,7 @@ export class LayerLifecycle {
       entry.lifecycleState !== 'enabled' ||
       entry.destroying ||
       entry.refreshing ||
+      entry._viewerSwap ||
       signal?.aborted
     )
       return false;
@@ -2153,6 +2154,104 @@ export class LayerLifecycle {
       console.warn(`[Data] ${layerId} getParams error:`, error);
       return null;
     }
+  }
+
+  /**
+   * Drop GPU objects before the viewer is destroyed. The layer stays
+   * registered and keeps its enabled flag so {@link attachToViewer} can
+   * build it again. Polls no-op while the swap flag is set.
+   */
+  async detachForViewerSwap() {
+    this._viewerSwap = true;
+    const pending = [];
+    for (const [layerId, entry] of this.layers) {
+      entry._viewerSwap = true;
+      if (
+        !entry.module ||
+        entry.destroying ||
+        (!entry.initialized &&
+          !entry.enabled &&
+          entry.lifecycleState !== 'enabled' &&
+          entry.lifecycleState !== 'enabling')
+      )
+        continue;
+      entry._restoreEnabled = Boolean(
+        entry.enabled ||
+        entry.lifecycleState === 'enabled' ||
+        entry.lifecycleState === 'enabling',
+      );
+      pending.push(
+        this._destroyModuleForSwap(layerId, entry).catch((error) => {
+          console.warn(`[Data] ${layerId} detach error:`, error);
+        }),
+      );
+    }
+    await Promise.all(pending);
+  }
+
+  async _destroyModuleForSwap(layerId, entry) {
+    if (typeof entry.module.destroy !== 'function') {
+      entry.initialized = false;
+      return;
+    }
+    try {
+      await entry.module.destroy();
+    } catch (error) {
+      console.warn(`[Data] ${layerId} destroy before viewer swap:`, error);
+    }
+    entry.initialized = false;
+  }
+
+  /**
+   * Point the lifecycle at `viewer` and rebuild layers that were on.
+   * A module that still thinks it is initialized is destroyed once more
+   * and then initialized.
+   */
+  async attachToViewer(viewer) {
+    this.viewer = viewer;
+    const pending = [];
+    for (const [layerId, entry] of this.layers) {
+      if (!entry._restoreEnabled || !entry.module) {
+        entry._viewerSwap = false;
+        continue;
+      }
+      pending.push(
+        this._attachModule(layerId, entry, viewer).catch((error) => {
+          console.warn(`[Data] ${layerId} reattach error:`, error);
+        }),
+      );
+    }
+    await Promise.all(pending);
+    this._viewerSwap = false;
+  }
+
+  async _attachModule(layerId, entry, viewer) {
+    const init = async () => {
+      if (typeof entry.module.init === 'function')
+        await entry.module.init(viewer);
+      entry.initialized = true;
+    };
+    try {
+      await init();
+    } catch (error) {
+      if (!/already initialized/i.test(String(error?.message || error)))
+        throw error;
+      try {
+        await entry.module.destroy?.();
+      } catch {
+        // The second destroy is only a retry after a partial teardown.
+      }
+      entry.initialized = false;
+      await init();
+    }
+    if (typeof entry.module.enable === 'function')
+      await entry.module.enable(viewer);
+    entry.enabled = true;
+    entry.lifecycleState = 'enabled';
+    if (typeof entry.module.update === 'function')
+      await entry.module.update(viewer);
+    entry._viewerSwap = false;
+    entry._restoreEnabled = false;
   }
 
   /**

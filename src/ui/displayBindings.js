@@ -42,6 +42,16 @@ export class DisplayBindings {
   get _models3dEnabled() {
     return this.readState()._models3dEnabled;
   }
+  /** Point the frame-rate monitor at a replacement viewer. */
+  rebindViewer(viewer) {
+    this.viewer = viewer;
+    this._frameRateMonitor?.destroy();
+    this._frameRateMonitor = createFrameRateMonitor({
+      viewer,
+      documentRef: document,
+    });
+  }
+
   _initUI() {
     const { cycleDetectionMode, isScopeMaskEnabled } = this.services;
     this._applicationShortcuts?.destroy();

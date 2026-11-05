@@ -64,7 +64,16 @@ export function createApplicationData({
   }
   presentation.mount(document.getElementById('data-toggles'));
   styleManager.attachDataManager(dataManager);
-  defer(createCyberSonarScene(viewer, dataManager));
+  let disposeSonar = createCyberSonarScene(viewer, dataManager);
+  defer(() => disposeSonar());
 
-  return { dataManager, catalog, presentation };
+  return {
+    dataManager,
+    catalog,
+    presentation,
+    rebindCyberSonar(next) {
+      disposeSonar();
+      disposeSonar = createCyberSonarScene(next, dataManager);
+    },
+  };
 }

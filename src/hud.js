@@ -1243,6 +1243,19 @@ export class IntelHUD {
     if (this._visible) this._updateCameraData();
   }
 
+  /** Move camera listeners onto a replacement viewer. */
+  adoptViewer(viewer) {
+    try {
+      this.viewer.camera.moveStart.removeEventListener(this._onCameraMoveStart);
+      this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
+    } catch {
+      // The old camera is already destroyed.
+    }
+    this.viewer = viewer;
+    viewer.camera.moveStart.addEventListener(this._onCameraMoveStart);
+    viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
+  }
+
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
     this._removeEmbedVisibility?.();

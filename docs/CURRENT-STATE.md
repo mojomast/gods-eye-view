@@ -973,7 +973,14 @@ hidden, including an app embedded inline. A host that reports the page hidden
 while the pane is on screen posts `{ type: 'gev:visibility', visible: true }`
 to keep them running (`keepPanelRendering` in `app/embed.js` still draws if
 animation frames have stopped). `visible: false` pauses a pane the document
-still calls visible. See `docs/EMBEDDING.md`.
+still calls visible. A lost WebGL context is replaced in place by
+`recreateViewer()` (also `{ type: 'gev:recreate' }`, answered with
+`gev:recreate-applied`): the context is released, the viewer is destroyed, and
+a new one is created in the same container. Layers, the map stack, visual
+style, camera listeners, embed reporting, the visibility pause, the embed
+performance profile, and the voice runner are rebound. The promise resolves
+when the first frame renders. `glRecover` makes the page do this on
+`webglcontextlost`. See `docs/EMBEDDING.md`.
 
 Application scene setup owns request services, terrain/floor caches and annotation
 lookup state. Controls, layers and voice share those owners, and cancellation

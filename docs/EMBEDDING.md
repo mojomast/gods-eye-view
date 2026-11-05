@@ -74,8 +74,9 @@ setup waits for this message only when asked.
 - Otherwise the app does not block. Post the message before load (as soon as
   `contentWindow` exists), or set `GEV_RUNTIME_CONFIG`, or ship `config.json`.
 
-`public/embed-boot.js` queues `gev:config` and `gev:visibility` until the app
-listens, so a message sent while the module is still starting is not lost.
+`public/embed-boot.js` queues `gev:config`, `gev:visibility`, and `gev:recreate`
+until the app listens, so a message sent while the module is still starting is
+not lost.
 
 ## Visibility
 
@@ -100,6 +101,39 @@ drawing from a timer. The app answers:
 document's own visibility is used. A message queued before the viewer exists is
 applied at startup; post again after `{ type: 'gev:ready' }` if you need the
 acknowledgement.
+
+## Replacing a lost WebGL context
+
+Cesium cannot restore GPU resources after `webglcontextlost`. The supported
+recovery destroys the viewer and creates another in the same container, then
+rebinds the layers, map stack, visual style, camera listeners, embed view
+reporting, visibility pause, performance profile, and voice runner. The camera
+pose is kept. The promise resolves to the new viewer when its first frame has
+rendered.
+
+```js
+const viewer = await iframe.contentWindow.__godsEyeView.recreateViewer({
+  container,
+  viewer: previous,
+});
+```
+
+`container` and `viewer` are optional. The same request is a message, answered
+like `gev:config` and `gev:visibility`:
+
+```js
+iframe.contentWindow.postMessage({ type: 'gev:recreate' }, '*');
+// { type: 'gev:recreate-applied', ok: true }
+```
+
+`ok: false` carries `error` (`unavailable` or `recreate-failed`). The hook is
+always installed. The page also handles `webglcontextlost` itself when
+`glRecover` is on (`?glRecover=1`, `"glRecover": true` in config, or the same
+field on `gev:config`). That switch is off unless set, so a standalone page
+does not rebuild on its own. After three losses inside 20 seconds, automatic
+recovery stops; an explicit `recreateViewer()` or `gev:recreate` still runs.
+The context is released with `WEBGL_lose_context.loseContext()` before
+`viewer.destroy()`.
 
 ## Performance profile
 

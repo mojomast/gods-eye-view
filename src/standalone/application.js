@@ -98,6 +98,7 @@ export function createStandaloneApplication({
         googleTokens: googleApiKey ? null : createGoogleTokenSource(),
         cesiumToken,
         profile: runtime?.profile ?? null,
+        glRecover: runtime?.glRecover === true,
         loaderStatus,
       });
       catalog = createStandaloneCatalog({

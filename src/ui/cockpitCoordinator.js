@@ -403,6 +403,10 @@ export class CockpitCoordinator {
   get _standardDisplayScrollTop() {
     return this._cockpitDisplayPortal?.standardScrollTop ?? 0;
   }
+  adoptViewer(viewer) {
+    this.viewer = viewer;
+    if (this.cockpitView) this.cockpitView.viewer = viewer;
+  }
   stop() {
     this.cockpitView?.stop();
     this._cockpitDisplayPortal?.stop();

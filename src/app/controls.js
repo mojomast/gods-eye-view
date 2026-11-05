@@ -42,12 +42,12 @@ export function createApplicationControls({
   defer(() => styleManager.orbitController.stop());
   defer(() => styleManager.hud.destroy());
   defer(() => styleManager.dispose());
-  defer(
-    installZoomOutGuard(viewer, {
-      subscribeCameraHandoff: (listener) =>
-        styleManager.subscribeCameraHandoff?.(listener),
-    }),
-  );
+  const zoomOptions = {
+    subscribeCameraHandoff: (listener) =>
+      styleManager.subscribeCameraHandoff?.(listener),
+  };
+  let removeZoom = installZoomOutGuard(viewer, zoomOptions);
+  defer(() => removeZoom());
   // The previous multi-canvas weather compositor remains disabled. Cockpit
   // clouds use a separate, capped low-resolution GPU pass that never attaches
   // Cesium fog or post-process stages and is fully stopped in map mode.
@@ -65,5 +65,17 @@ export function createApplicationControls({
     loaderStatus.textContent = t('Restoring shared view...');
   }
 
-  return { styleManager, weatherEffects, cockpitCloudEffects };
+  return {
+    styleManager,
+    weatherEffects,
+    cockpitCloudEffects,
+    releaseZoom() {
+      removeZoom();
+      removeZoom = () => {};
+    },
+    rebindZoom(next) {
+      removeZoom();
+      removeZoom = installZoomOutGuard(next, zoomOptions);
+    },
+  };
 }

@@ -2324,6 +2324,7 @@
       "src/app/surfaceServices.js",
       "src/app/tools.js",
       "src/app/viewer.js",
+      "src/app/webglRecovery.js",
       "src/sky/starrySky.js",
       "src/sky/stars.js",
       "src/app/atmosphereCompat.js",

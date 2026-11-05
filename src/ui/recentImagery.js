@@ -200,14 +200,16 @@ function revealCard(scroller, card) {
 export function createRecentImageryPanel({
   container,
   layer,
-  viewer = null,
+  viewer: initialViewer = null,
   tool = null,
   createSplit = createImagerySplit,
   fetchImpl = globalThis.fetch?.bind(globalThis),
   createObjectUrl = (blob) => URL.createObjectURL(blob),
   revokeObjectUrl = (url) => URL.revokeObjectURL(url),
-  requestRender = () => viewer?.scene?.requestRender?.(),
+  requestRender = null,
 } = {}) {
+  let viewer = initialViewer;
+  requestRender ||= () => viewer?.scene?.requestRender?.();
   const document = container?.ownerDocument;
   if (!document?.createElement || !layer) return null;
   const panel = document.getElementById?.(PANEL_ID) || null;
@@ -951,6 +953,9 @@ export function createRecentImageryPanel({
   return {
     root,
     exportImage,
+    rebindViewer(next) {
+      viewer = next;
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;

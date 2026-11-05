@@ -1,3 +1,5 @@
+import { readGlRecoverFlag } from './app/webglRecovery.js';
+
 /**
  * Client settings that can change without a rebuild.
  *
@@ -126,6 +128,8 @@ export function normalizeClientOverlay(raw) {
   }
   const preserve = present(raw, ['preserveDrawingBuffer']);
   if (typeof preserve === 'boolean') overlay.preserveDrawingBuffer = preserve;
+  const glRecover = readGlRecoverFlag(present(raw, ['glRecover']));
+  if (glRecover !== undefined) overlay.glRecover = glRecover;
   return overlay;
 }
 
@@ -165,6 +169,7 @@ export function readSearchClientConfig(search = '') {
     if (value === '0' || value === 'false') raw.preserveDrawingBuffer = false;
     if (value === '1' || value === 'true') raw.preserveDrawingBuffer = true;
   }
+  if (params.has('glRecover')) raw.glRecover = params.get('glRecover');
   return normalizeClientOverlay(raw);
 }
 
@@ -207,6 +212,8 @@ export function mergeClientConfig(base, overlay) {
   ]) {
     if (overlay[field] !== undefined) next[field] = overlay[field];
   }
+  if (typeof overlay.glRecover === 'boolean')
+    next.glRecover = overlay.glRecover;
   return next;
 }
 

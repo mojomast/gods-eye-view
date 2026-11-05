@@ -31,6 +31,16 @@ export function initAnnotations({
     placeSearch,
     resolveTarget: resolver?.resolveAnnotationTarget,
   });
+  engine.rebindViewer = ((rebind) => (next, nextTileset) => {
+    if (nextTileset) {
+      try {
+        nextTileset.enableCollision = true;
+      } catch {
+        /* older tileset */
+      }
+    }
+    rebind(next, createHybridAnnotationRenderer(next));
+  })(engine.rebindViewer);
   window.__gevAnnotations = engine;
   return engine;
 }

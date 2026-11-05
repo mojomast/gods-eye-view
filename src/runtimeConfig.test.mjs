@@ -109,6 +109,22 @@ test('the embed profile is opt-in and numeric knobs stay inside bounds', () => {
   assert.deepEqual(onlyCache, { cacheBytes: 256 * 1024 * 1024 });
 });
 
+test('glRecover is off unless the host sets it', () => {
+  assert.equal(readSearchClientConfig('').glRecover, undefined);
+  assert.equal(readSearchClientConfig('?glRecover=1').glRecover, true);
+  assert.equal(readSearchClientConfig('?glRecover=off').glRecover, false);
+  assert.equal(normalizeClientOverlay({ glRecover: 'yes' }).glRecover, true);
+  assert.equal(
+    mergeClientConfig({ glRecover: false }, { glRecover: true }).glRecover,
+    true,
+  );
+  assert.equal(
+    overlayFromConfigMessage({ type: 'gev:config', glRecover: false })
+      .glRecover,
+    false,
+  );
+});
+
 test('url perf=embed opts in and waitForConfig chooses the wait', () => {
   assert.equal(readSearchClientConfig('?perf=embed').perf, 'embed');
   assert.equal(readSearchClientConfig('?welcome=0').perf, undefined);

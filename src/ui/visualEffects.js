@@ -228,6 +228,40 @@ export class VisualEffects {
     this.frameId = this.requestFrame(update);
   }
 
+  /**
+   * Rebuild stages on a new viewer. The old stages died with the lost
+   * context, so this does not try to remove them.
+   */
+  rebind(viewer) {
+    const intensities = {};
+    for (const [name, stage] of Object.entries(this.stages))
+      intensities[name] = stage?.uniforms?.intensity ?? 0;
+    const bloomEnabled = this.bloomEnabled;
+    const sharpenEnabled = this.sharpenEnabled;
+    const bloomIntensity = this.bloomIntensity;
+    const sharpenIntensity = this.sharpenIntensity;
+    if (this.frameId !== null) this.cancelFrame(this.frameId);
+    this.frameId = null;
+    this.transitions.clear();
+    this.releaseRender('style-anim');
+    this.stopped = false;
+    this.destroyed = false;
+    this.stages = {};
+    this.stageEntries = [];
+    this.bloomStage = null;
+    this.sharpenStage = null;
+    this.previousBloom = null;
+    this.viewer = viewer;
+    this.initStyles();
+    this.initPostProcess(sharpenIntensity);
+    this.bloomIntensity = bloomIntensity;
+    this.setBloomEnabled(bloomEnabled);
+    this.applyBloomIntensity(bloomIntensity);
+    this.setSharpenEnabled(sharpenEnabled);
+    for (const [name, intensity] of Object.entries(intensities))
+      this.setStageIntensity(this.stages[name], intensity);
+  }
+
   /** Revoke animation synchronously while callers finish releasing the stages. */
   stop() {
     if (this.stopped) return;

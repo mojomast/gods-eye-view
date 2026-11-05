@@ -959,6 +959,7 @@ export function advanceRouteFlight(state, dt) {
 }
 
 let _viewer = null;
+let _boundTarget = null;
 let _getTarget = null;
 let _active = null; // { kind, motion, direction, speed, mode, motionId, ...state }
 let _tickRemover = null;
@@ -1400,7 +1401,8 @@ export function initCameraVerbs(
     typeof getViewTargetCartesian === 'function'
       ? getViewTargetCartesian
       : null;
-  if (_viewer === viewer) {
+  const bound = viewer?.__gevLiveSlot?.current || viewer;
+  if (_viewer === viewer && _boundTarget === bound) {
     if (nextTarget) _getTarget = nextTarget;
     if (typeof isCockpitActive === 'function')
       _isCockpitActive = isCockpitActive;
@@ -1413,16 +1415,31 @@ export function initCameraVerbs(
   _isCockpitActive =
     typeof isCockpitActive === 'function' ? isCockpitActive : null;
   _viewer = viewer;
-  if (_tickRemover) _tickRemover();
+  _boundTarget = bound;
+  try {
+    if (_tickRemover) _tickRemover();
+  } catch {
+    // The previous clock is already destroyed.
+  }
   _tickRemover = viewer.clock.onTick.addEventListener(onTick);
-  if (_trackingRemover) _trackingRemover();
+  try {
+    if (_trackingRemover) _trackingRemover();
+  } catch {
+    // The previous viewer is already destroyed.
+  }
   // Cockpit can acquire then clear tracking before the next clock tick.
   // Yield on acquisition itself without changing legacy camera motions.
   _trackingRemover = viewer.trackedEntityChanged?.addEventListener((entity) => {
     if (entity && _active?.kind === 'rotate_globe')
       interruptCameraMotion('globe-camera-owner-changed');
   });
-  for (const rm of _inputRemovers) rm();
+  for (const rm of _inputRemovers) {
+    try {
+      rm();
+    } catch {
+      // The previous canvas is already gone.
+    }
+  }
   _inputRemovers = [];
   const canvas = viewer.scene.canvas;
   // ANY manual camera input reclaims control — the cancelFlight reflex.

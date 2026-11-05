@@ -574,6 +574,73 @@ export class MapSourceController {
     if (typeof value.destroy === 'function' && !value.isDestroyed?.())
       value.destroy();
   }
+  /**
+   * Swap the tileset object a source already holds. The photoreal source
+   * keeps the supplied tileset rather than one this controller created.
+   */
+  replaceSuppliedTileset(previous, next) {
+    for (const source of this._sources.values()) {
+      const photoreal = source.descriptor?.kind === 'photoreal';
+      if (photoreal) {
+        if (!previous || source.tileset === previous) source.tileset = next;
+        if (next) source.available = true;
+      } else if (previous && source.tileset === previous) {
+        source.tileset = next;
+      }
+    }
+    if ('googleTileset' in this) this.googleTileset = next;
+  }
+
+  /**
+   * Point this controller at a new viewer. Imagery, terrain, and owned
+   * tilesets belong to the destroyed context, so they are dropped and the
+   * active stack is built again. This does not abort the controller.
+   */
+  async retargetViewer(viewer) {
+    if (this._destroyed || !viewer) return this.getState?.() ?? null;
+    const activeId = this._activeId;
+    this._imageryLayer = null;
+    this._activeImageryProvider = null;
+    this._activeResolution = null;
+    try {
+      this._removeImageryErrorListener?.();
+    } catch {
+      // The old canvas is already gone.
+    }
+    this._removeImageryErrorListener = null;
+    this._disposeCached(this._imageryProviders);
+    this._disposeCached(this._terrainProviders);
+    this._imageryProviders.clear();
+    this._terrainProviders.clear();
+    this._tilesets.clear();
+    for (const tileset of this._ownedTilesets) {
+      try {
+        if (!tileset.isDestroyed?.()) tileset.destroy();
+      } catch {
+        // A tileset from the lost context may already be dead.
+      }
+    }
+    this._ownedTilesets.clear();
+    try {
+      this._credits?.destroy?.();
+    } catch {
+      // Credits follow the old viewer.
+    }
+    this.viewer = viewer;
+    this._requestRender = () => viewer.scene?.requestRender?.();
+    this._credits = createMapCredits(viewer);
+    if (!activeId) return this.getState?.() ?? null;
+    return this.setStack(activeId, { silent: true });
+  }
+
+  _disposeCached(cache) {
+    for (const promise of cache.values())
+      void Promise.resolve(promise).then(
+        (value) => this._dispose(value?.provider),
+        () => {},
+      );
+  }
+
   destroy() {
     if (this._destroyed) return;
     this._destroyed = true;

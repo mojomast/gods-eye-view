@@ -177,6 +177,9 @@ pauses or resumes the render loop, HUD timers and feed polls, including when
 the pane is covered but the document still looks visible. Client keys and an
 optional `perf=embed` profile load from `config.json`,
 `window.GEV_RUNTIME_CONFIG` or `{ type: 'gev:config', ... }` without a rebuild.
+`{ type: 'gev:recreate' }` (or `window.__godsEyeView.recreateViewer`) replaces
+a lost WebGL context in the same container; `glRecover` does that on
+`webglcontextlost`. The answer is `{ type: 'gev:recreate-applied', ok }`.
 See `src/app/embed.js` and `docs/EMBEDDING.md`.
 
 No page may frame the app by default: every document keeps
