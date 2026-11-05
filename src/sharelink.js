@@ -140,6 +140,19 @@ export class ShareLinkManager {
     );
   }
 
+  /** Listen to the replacement viewer's camera. */
+  adoptViewer(viewer) {
+    try {
+      this._removeCameraChanged?.();
+    } catch {
+      // The old camera is already destroyed.
+    }
+    this.viewer = viewer;
+    this._removeCameraChanged = viewer.camera.changed.addEventListener(() => {
+      this._scheduleUpdate();
+    });
+  }
+
   /**
    * Parse the share this page opened with: the host's `initialShareCode`, a
    * `/share/<code>` address, or a long-form hash. Returns the parsed state, or

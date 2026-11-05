@@ -7,6 +7,11 @@
   window.addEventListener('message', function (event) {
     if (!window.__GEV_QUEUE_MESSAGES__) return;
     var type = event && event.data && event.data.type;
-    if (type === 'gev:config' || type === 'gev:visibility') queue.push(event);
+    if (
+      type === 'gev:config' ||
+      type === 'gev:visibility' ||
+      type === 'gev:recreate'
+    )
+      queue.push(event);
   });
 })();

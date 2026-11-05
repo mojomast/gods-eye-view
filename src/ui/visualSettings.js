@@ -267,6 +267,12 @@ export class VisualSettings {
     return this._visualEffects.stages;
   }
 
+  /** Rebuild post-process stages on a replacement viewer. */
+  rebindViewer(viewer) {
+    this.viewer = viewer;
+    this._visualEffects?.rebind?.(viewer);
+  }
+
   get transitions() {
     return this._visualEffects.transitions;
   }

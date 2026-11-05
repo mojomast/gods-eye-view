@@ -24,6 +24,8 @@ const EMBED_VISIBILITY_MESSAGE = 'gev:visibility';
 const EMBED_VISIBILITY_APPLIED_MESSAGE = 'gev:visibility-applied';
 const EMBED_CONFIG_MESSAGE = 'gev:config';
 const EMBED_CONFIG_APPLIED_MESSAGE = 'gev:config-applied';
+const EMBED_RECREATE_MESSAGE = 'gev:recreate';
+const EMBED_RECREATE_APPLIED_MESSAGE = 'gev:recreate-applied';
 
 const FOLLOW_LAYERS = {
   aircraft: 'flights',
@@ -368,6 +370,8 @@ export function installViews({
   signal,
   location = globalThis.location,
   windowRef = globalThis.window,
+  getViewer = () => viewer,
+  recreateViewer = null,
 }) {
   const ready = Promise.resolve(shell.initialRestorePromise).catch(() => {});
   const linked = annotationsFromParams(
@@ -381,9 +385,15 @@ export function installViews({
 
   windowRef.document.body.classList.add('ui-embed');
   shell.setCleanView?.(true);
-  const stopRendering = isEmbeddedInline()
-    ? keepPanelRendering(viewer, { windowRef })
+  let stopRendering = isEmbeddedInline()
+    ? keepPanelRendering(getViewer() || viewer, { windowRef })
     : () => {};
+  const restartRendering = (next) => {
+    stopRendering();
+    stopRendering = isEmbeddedInline()
+      ? keepPanelRendering(next || getViewer(), { windowRef })
+      : () => {};
+  };
   // A framing page talks to the app across frames; an inline panel shares
   // the page with it and talks through the page's own window.
   const peer = isEmbeddedInline() ? windowRef : windowRef.parent;
@@ -433,8 +443,45 @@ export function installViews({
     );
     return true;
   };
+  const onRecreate = (event) => {
+    if (event.data?.type !== EMBED_RECREATE_MESSAGE) return false;
+    if (!isEmbedMessageSource(event, windowRef)) return true;
+    const replyOrigin = replyOriginFor(event);
+    queue = queue.then(async () => {
+      if (signal?.aborted) return;
+      if (typeof recreateViewer !== 'function') {
+        post(
+          {
+            type: EMBED_RECREATE_APPLIED_MESSAGE,
+            ok: false,
+            error: 'unavailable',
+          },
+          replyOrigin,
+        );
+        return;
+      }
+      try {
+        const next = await recreateViewer();
+        restartRendering(next);
+        post(
+          { type: EMBED_RECREATE_APPLIED_MESSAGE, ok: Boolean(next) },
+          replyOrigin,
+        );
+      } catch {
+        post(
+          {
+            type: EMBED_RECREATE_APPLIED_MESSAGE,
+            ok: false,
+            error: 'recreate-failed',
+          },
+          replyOrigin,
+        );
+      }
+    });
+    return true;
+  };
   const onMessage = (event) => {
-    if (onVisibility(event) || onLateConfig(event)) return;
+    if (onVisibility(event) || onLateConfig(event) || onRecreate(event)) return;
     if (event.source !== peer || event.data?.type !== EMBED_VIEW_MESSAGE)
       return;
     const { id = null } = event.data;
@@ -456,7 +503,12 @@ export function installViews({
     }
     queue = queue.then(async () => {
       if (signal?.aborted) return;
-      const steps = await applyView(view, { viewer, dataManager, run, signal });
+      const steps = await applyView(view, {
+        viewer: getViewer() || viewer,
+        dataManager,
+        run,
+        signal,
+      });
       post(
         {
           type: EMBED_APPLIED_MESSAGE,
@@ -478,10 +530,12 @@ export function installViews({
   void ready.then(() => {
     if (!signal?.aborted) post({ type: EMBED_READY_MESSAGE });
   });
-  return () => {
+  const remove = () => {
     stopRendering();
     windowRef.removeEventListener('message', onMessage);
   };
+  remove.restartRendering = restartRendering;
+  return remove;
 }
 
 function isEmbedMessageSource(event, windowRef) {

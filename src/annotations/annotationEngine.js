@@ -131,11 +131,13 @@ export function normalizeTargetKey(target) {
 
 export function createAnnotationEngine({
   placeSearch = defaultGeospatial,
-  viewer,
-  renderer,
+  viewer: initialViewer,
+  renderer: initialRenderer,
   outlineRetryDelaysMs = OUTLINE_RETRY_DELAYS_MS,
   resolveTarget = resolveAnnotationTarget,
 }) {
+  let viewer = initialViewer;
+  let renderer = initialRenderer;
   /** @type {Map<string, object>} live annotations keyed by id */
   const annotations = new Map();
   let destroyed = false;
@@ -1813,6 +1815,29 @@ export function createAnnotationEngine({
       if (destroyed || typeof listener !== 'function') return () => {};
       changeListeners.add(listener);
       return () => changeListeners.delete(listener);
+    },
+    rebindViewer(nextViewer, nextRenderer) {
+      if (destroyed) return;
+      const kept = [...annotations.values()];
+      try {
+        renderer.destroy();
+      } catch {
+        // The old renderer left with the lost context.
+      }
+      viewer = nextViewer;
+      if (nextRenderer) renderer = nextRenderer;
+      for (const anno of kept) {
+        try {
+          renderer.add(anno);
+        } catch (error) {
+          console.warn('[Annotations] could not redraw a mark', error);
+        }
+      }
+      try {
+        renderer.sync?.(annotations);
+      } catch {
+        // A renderer without sync still drew each mark above.
+      }
     },
     destroy() {
       if (destroyed) return;

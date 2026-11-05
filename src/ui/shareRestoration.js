@@ -215,6 +215,29 @@ export class ShareRestoration {
     );
   }
 
+  /** Move the share-gesture listeners onto a replacement canvas. */
+  adoptViewer(viewer) {
+    const canvas = this.viewer?.canvas;
+    if (canvas && this._initialShareGestureHandler) {
+      canvas.removeEventListener(
+        'pointerdown',
+        this._initialShareGestureHandler,
+      );
+      canvas.removeEventListener('wheel', this._initialShareGestureHandler);
+    }
+    this.viewer = viewer;
+    viewer?.canvas?.addEventListener(
+      'pointerdown',
+      this._initialShareGestureHandler,
+      { passive: true },
+    );
+    viewer?.canvas?.addEventListener(
+      'wheel',
+      this._initialShareGestureHandler,
+      { passive: true },
+    );
+  }
+
   /**
    * Apply one incoming share: camera, visual, map and panels, then layers and
    * any shared Follow. Only the newest share may finish: a superseded run

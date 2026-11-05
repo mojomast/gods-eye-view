@@ -71,7 +71,7 @@ const PREVIEW = DRAW_COLOR_CSS;
  * @returns {{destroy: Function}|null}
  */
 export function initDrawTool({
-  viewer,
+  viewer: initialViewer,
   annotations,
   navigation = null,
   publish = () => {},
@@ -79,6 +79,7 @@ export function initDrawTool({
 }) {
   // A page without the Draw controls (the Display controls view omitted) has
   // no draw tool.
+  let viewer = initialViewer;
   if (!viewer || !annotations || !document.getElementById('draw-toggle'))
     return null;
 
@@ -517,6 +518,24 @@ export function initDrawTool({
     finish,
     cancel,
     clearAll,
+    async rebindViewer(next) {
+      if (destroyed || !next) return;
+      if (active) setActive(false);
+      try {
+        await attaching;
+      } catch {
+        // The preview source may never have attached.
+      }
+      try {
+        viewer.dataSources.remove(dataSource, false);
+      } catch {
+        // The old viewer is already destroyed.
+      }
+      viewer = next;
+      attaching = Promise.resolve(next.dataSources.add(dataSource)).catch(
+        () => null,
+      );
+    },
     shapes: DRAW_SHAPES,
     /** What this tool currently holds — for teardown and leak assertions. */
     diagnostics() {

@@ -44,6 +44,9 @@ export class NavigationController {
     this._activeLocationSearchGeneration = null;
     this._disposed = false;
   }
+  adoptViewer(viewer) {
+    this.viewer = viewer;
+  }
   _stampNavigation({
     cancelPendingSelection = true,
     clearSearchedLocation = true,

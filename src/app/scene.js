@@ -24,6 +24,7 @@ export async function createApplicationScene({
   googleTokens = null,
   cesiumToken,
   profile = null,
+  glRecover = false,
   credits,
   MapController = MapStackController,
   mapOptions = {},
@@ -51,19 +52,29 @@ export async function createApplicationScene({
   creditContainer.id = 'cesium-credits';
   document.body.appendChild(creditContainer);
   defer(() => creditContainer.remove());
-  const viewer = createApplicationViewer({
-    container: 'cesiumContainer',
-    creditContainer,
-    msaaSamples: profile?.msaaSamples,
-    preserveDrawingBuffer: profile?.preserveDrawingBuffer,
-    targetFrameRate: profile?.targetFrameRate,
-  });
+  const globe = { viewer: null, tileset: null };
+  let removePinch = () => {};
+  let removeTilesetPerf = () => {};
+  const mountViewer = (container) => {
+    const next = createApplicationViewer({
+      container,
+      creditContainer,
+      msaaSamples: profile?.msaaSamples,
+      preserveDrawingBuffer: profile?.preserveDrawingBuffer,
+      targetFrameRate: profile?.targetFrameRate,
+    });
+    removePinch();
+    removePinch = installTrackpadPinchZoom(next);
+    registerDataCredits(next, credits);
+    return next;
+  };
+  globe.viewer = mountViewer('cesiumContainer');
   defer(() => {
-    uninstallRenderGovernor(viewer);
-    if (!viewer.isDestroyed()) viewer.destroy();
+    removePinch();
+    removeTilesetPerf();
+    uninstallRenderGovernor(globe.viewer);
+    if (globe.viewer && !globe.viewer.isDestroyed()) globe.viewer.destroy();
   });
-  defer(installTrackpadPinchZoom(viewer));
-  registerDataCredits(viewer, credits);
   configureCreditKeyboardAccess(document);
   defer(onLocaleChange(() => configureCreditKeyboardAccess(document)));
   loaderStatus.textContent =
@@ -75,16 +86,19 @@ export async function createApplicationScene({
     googleTokens,
     cesiumToken,
   });
-  const tileset = photoreal.tileset;
+  globe.tileset = photoreal.tileset;
+  const tileset = globe.tileset;
+  const viewer = globe.viewer;
   // A provider can finish after cancellation; retain ownership of its result.
   defer(() => {
-    if (tileset && !tileset.isDestroyed()) {
-      if (!viewer.scene.primitives.remove(tileset)) tileset.destroy();
+    const current = globe.tileset;
+    if (current && !current.isDestroyed()) {
+      if (!globe.viewer.scene.primitives.remove(current)) current.destroy();
     }
   });
   signal.throwIfAborted();
   if (tileset) {
-    defer(applyTilesetPerformance(viewer, tileset, profile));
+    removeTilesetPerf = applyTilesetPerformance(viewer, tileset, profile);
     viewer.scene.primitives.add(tileset);
     // NOTE: Cesium World Terrain intentionally disabled — conflicts with Google 3D Tiles at high zoom.
     // Google Photorealistic 3D Tiles provide their own terrain/elevation.
@@ -134,5 +148,61 @@ export async function createApplicationScene({
   });
 
   signal.throwIfAborted();
-  return { viewer, tileset, mapStackController, operations };
+
+  /**
+   * Build a viewer in the same container after the previous one is destroyed.
+   * The photoreal tileset is a GPU resource, so it is loaded again.
+   */
+  function releaseViewerInput() {
+    removePinch();
+    removePinch = () => {};
+    removeTilesetPerf();
+    removeTilesetPerf = () => {};
+  }
+
+  async function createReplacementViewer({ container } = {}) {
+    const previousTileset = globe.tileset;
+    const host = container || globe.viewer?.container || 'cesiumContainer';
+    const next = mountViewer(host);
+    const replacement = await loadPhotorealisticTileset(Cesium, {
+      googleApiKey,
+      googleTokens,
+      cesiumToken,
+    });
+    const nextTileset = replacement.tileset || null;
+    removeTilesetPerf();
+    removeTilesetPerf = () => {};
+    if (nextTileset) {
+      try {
+        nextTileset.enableCollision = true;
+      } catch {
+        // Collision is optional on a tileset that has not finished loading.
+      }
+      next.scene.primitives.add(nextTileset);
+      next.scene.globe.show = false;
+      removeTilesetPerf = applyTilesetPerformance(next, nextTileset, profile);
+    } else {
+      next.scene.globe.show = true;
+    }
+    globe.tileset = nextTileset;
+    globe.viewer = next;
+    mapStackController.replaceSuppliedTileset(previousTileset, nextTileset);
+    await mapStackController.retargetViewer(next);
+    return next;
+  }
+
+  return {
+    globe,
+    get viewer() {
+      return globe.viewer;
+    },
+    get tileset() {
+      return globe.tileset;
+    },
+    mapStackController,
+    operations,
+    glRecover: glRecover === true,
+    releaseViewerInput,
+    createReplacementViewer,
+  };
 }

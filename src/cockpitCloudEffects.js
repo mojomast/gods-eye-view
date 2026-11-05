@@ -226,6 +226,15 @@ class CockpitCloudEffectsController {
     this.emitEnabledState();
   }
 
+  adoptViewer(viewer) {
+    this.viewer = viewer;
+    if (this.gl?.isContextLost?.()) {
+      this.gl = null;
+      this.program = null;
+      this.locations = null;
+    }
+  }
+
   readEnabledPreference() {
     try {
       return cockpitWeatherEnabledFromStoredValue(

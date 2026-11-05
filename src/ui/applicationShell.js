@@ -112,6 +112,11 @@ export class StyleManager extends ShellFacade {
       subscribeWorldOverlayActions,
       activateWorldOverlayAction,
       initDetection,
+      destroyDetection,
+      destroyWorldOverlay,
+      destroyTrackedReadout,
+      getDetectionMode,
+      setDetectionModeByLabel,
       setDetectionStyle,
       trafficLayer,
       flightsLayer,
@@ -195,7 +200,7 @@ export class StyleManager extends ShellFacade {
       feedback: this._feedback,
       updateFeedback: () => this._updateGlobalLoadingFeedback(),
       applyFollowOffset: (entity, offset) =>
-        applyShareFollowOffset(viewer, entity, offset),
+        applyShareFollowOffset(this.viewer, entity, offset),
     });
 
     this._visualSettings = new VisualSettings({
@@ -518,6 +523,42 @@ export class StyleManager extends ShellFacade {
       },
     );
     initTrackedReadout(viewer);
+    const detectionLayers = [
+      trafficLayer,
+      flightsLayer,
+      militaryFlightsLayer,
+      localAdsbLayer,
+      satellitesLayer,
+      cctvLayer,
+      bikeshareLayer,
+      transitLayer,
+      aisLiveVesselsLayer,
+    ].filter(Boolean);
+    this._rebindOverlayHosts = (next) => {
+      const mode = getDetectionMode?.() || 'OFF';
+      try {
+        destroyWorldOverlay?.();
+      } catch {
+        // The overlay already left with the old scene.
+      }
+      initWorldOverlay(next);
+      try {
+        destroyDetection?.();
+      } catch {
+        // Detection already dropped its canvas.
+      }
+      initDetection(next, detectionLayers, (modeLabel) => {
+        this._updateDetectionButton(modeLabel);
+      });
+      if (mode && mode !== 'OFF') setDetectionModeByLabel?.(mode);
+      setDetectionStyle(this.activeStyle);
+      try {
+        destroyTrackedReadout?.();
+      } catch {
+        // The readout already left with the old scene.
+      }
+      initTrackedReadout(next);
+    };
     setDetectionStyle(this.activeStyle);
     this._setDetectionDensity();
 
@@ -1768,6 +1809,36 @@ export class StyleManager extends ShellFacade {
       this._initialShareRestorePromise ||
       Promise.resolve({ status: 'not-requested' })
     );
+  }
+
+  /**
+   * Point the shell, its camera listeners, and post-processing at a
+   * replacement viewer. Layers and the map stack are rebound by the caller.
+   */
+  adoptViewer(viewer) {
+    this.viewer = viewer;
+    this._navigation?.adoptViewer?.(viewer);
+    this._shareRestoration?.adoptViewer?.(viewer);
+    this._locationNavigation?.adoptViewer?.(viewer);
+    this._visualSettings?.rebindViewer?.(viewer);
+    this.hud?.adoptViewer?.(viewer);
+    this.shareLinkManager?.adoptViewer?.(viewer);
+    this.celestialRing?.adoptViewer?.(viewer);
+    this._displayBindings?.rebindViewer?.(viewer);
+    this._cockpitCoordinator?.adoptViewer?.(viewer);
+    try {
+      this._rebindOverlayHosts?.(viewer);
+    } catch (error) {
+      console.warn('[WebGL] Overlay hosts were not rebound:', error);
+    }
+    try {
+      this._initCameraOrientationControls?.();
+    } catch (error) {
+      console.warn(
+        '[WebGL] Camera orientation controls were not rebound:',
+        error,
+      );
+    }
   }
 
   /**

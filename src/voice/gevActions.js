@@ -309,10 +309,13 @@ export function createGevActionRunner({
         isWarming: (layerKey) => layerIsWarming(_layerEnabledAt, layerKey),
       }),
     ));
-  installViewTargetPrewarm(viewer);
-  initCameraVerbs(viewer, getViewTargetCartesian, {
-    isCockpitActive: () => Boolean(styleManager?.getCockpitState?.()?.active),
-  });
+  const bindCamera = () => {
+    installViewTargetPrewarm(viewer);
+    initCameraVerbs(viewer, getViewTargetCartesian, {
+      isCockpitActive: () => Boolean(styleManager?.getCockpitState?.()?.active),
+    });
+  };
+  bindCamera();
   // Nested calls (select_nearest_aircraft composing layer + flight) use the
   // raw runner; only the outer call gets a voice envelope.
   const voiceUnavailable = (action) => ({
@@ -1578,6 +1581,9 @@ export function createGevActionRunner({
     analystEngine?.reset();
   };
   /** Voice was removed: nothing may run or write again. */
+  runVoiceAction.rebindViewer = () => {
+    bindCamera();
+  };
   runVoiceAction.dispose = () => {
     if (disposed) return;
     runVoiceAction.resetConversation();

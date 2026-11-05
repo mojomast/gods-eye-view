@@ -33,7 +33,7 @@ function localizedValues(values) {
  *   diagnostics: Function}|null}
  */
 export function initGeoFileImport({
-  viewer,
+  viewer: initialViewer,
   load = loadGeoFile,
   document: doc = globalThis.document,
   flyToSource = flyToDataSource,
@@ -45,6 +45,7 @@ export function initGeoFileImport({
 }) {
   // A page without the Import control (the Utilities panel omitted, in
   // LayerPanelsView) has no file import.
+  let viewer = initialViewer;
   if (!viewer || !doc?.getElementById('geo-import-button')) return null;
 
   const imports = [];
@@ -387,6 +388,27 @@ export function initGeoFileImport({
     setVisible,
     flyTo,
     remove,
+    rebindViewer(next) {
+      if (destroyed || !next) return;
+      const oldCanvas = viewer.scene?.canvas;
+      for (const item of imports) {
+        try {
+          viewer.dataSources?.remove?.(item.dataSource, false);
+        } catch {
+          // The old viewer is already destroyed.
+        }
+      }
+      viewer = next;
+      const canvas = next.scene?.canvas || next.container;
+      for (const entry of listeners) {
+        if (oldCanvas && entry[0] === oldCanvas) {
+          oldCanvas.removeEventListener(entry[1], entry[2], entry[3]);
+          entry[0] = canvas;
+          canvas?.addEventListener(entry[1], entry[2], entry[3]);
+        }
+      }
+      for (const item of imports) void next.dataSources?.add?.(item.dataSource);
+    },
     diagnostics: () => ({
       files: imports.length,
       entities: imports.reduce((n, item) => n + item.entityCount, 0),

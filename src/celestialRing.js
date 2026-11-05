@@ -884,6 +884,29 @@ export class CelestialRing {
       : null;
   }
 
+  /** Draw the ring from a replacement viewer. The ephemeris timer stays. */
+  adoptViewer(viewer) {
+    try {
+      this._removePostRender?.();
+    } catch {
+      // The old scene is already destroyed.
+    }
+    this._removePostRender = null;
+    if (this._shown()) {
+      try {
+        this._store.connect(null);
+        this._store.publish(null);
+      } catch {
+        // The overlay store can already be disconnected.
+      }
+    }
+    this.viewer = viewer;
+    this._initView(this._store);
+    this._removePostRender = viewer.scene.postRender.addEventListener(() =>
+      this._draw(),
+    );
+  }
+
   /** Detach the render hook and withdraw the overlay. */
   destroy() {
     if (this._ephemerisTimer) {

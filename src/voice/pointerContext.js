@@ -259,6 +259,7 @@ export function createPointerTracker({
   setTimer = (fn, ms) => setTimeout(fn, ms),
   clearTimer = (id) => clearTimeout(id),
 }) {
+  let elementRef = element;
   let inside = false;
   let x = 0;
   let y = 0;
@@ -269,12 +270,12 @@ export function createPointerTracker({
   let held = null;
   let active = null;
   let destroyed = false;
-  const listeners = new AbortController();
+  let listeners = new AbortController();
 
   function size() {
     return {
-      width: element?.clientWidth || element?.width || 0,
-      height: element?.clientHeight || element?.height || 0,
+      width: elementRef?.clientWidth || elementRef?.width || 0,
+      height: elementRef?.clientHeight || elementRef?.height || 0,
     };
   }
 
@@ -310,7 +311,7 @@ export function createPointerTracker({
   }
 
   function onMove(event) {
-    const rect = element.getBoundingClientRect?.() || { left: 0, top: 0 };
+    const rect = elementRef.getBoundingClientRect?.() || { left: 0, top: 0 };
     moveTo(event.clientX - rect.left, event.clientY - rect.top);
   }
 
@@ -321,12 +322,14 @@ export function createPointerTracker({
     cancelDwell();
   }
 
-  if (element?.addEventListener) {
+  function listen(target) {
+    if (!target?.addEventListener) return;
     const options = { passive: true, signal: listeners.signal };
-    element.addEventListener('pointermove', onMove, options);
-    element.addEventListener('pointerdown', onMove, options);
-    element.addEventListener('pointerleave', onLeave, options);
+    target.addEventListener('pointermove', onMove, options);
+    target.addEventListener('pointerdown', onMove, options);
+    target.addEventListener('pointerleave', onLeave, options);
   }
+  listen(elementRef);
 
   /** Is the pointer a referent right now? */
   function isFresh(recentMs = POINTER_FRESH_MS) {
@@ -365,7 +368,21 @@ export function createPointerTracker({
   }
 
   return {
-    element,
+    get element() {
+      return elementRef;
+    },
+    /** Listen on the replacement canvas. The old listeners are dropped. */
+    retarget(next) {
+      if (destroyed) return;
+      listeners.abort();
+      listeners = new AbortController();
+      elementRef = next;
+      inside = false;
+      anchor = null;
+      dwell = null;
+      cancelDwell();
+      listen(next);
+    },
     capture,
     isFresh,
     /** Push-to-talk keydown: snapshot now, keep it for the hold. */

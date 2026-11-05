@@ -26,7 +26,7 @@ export const IMAGERY_BOX_POINTER_OWNER = 'recent-imagery-box';
  * @returns {{ start: () => boolean, cancel: (reason?: string) => void, isActive: () => boolean, destroy: () => Promise<void> } | null}
  */
 export function initImageryBoxTool({
-  viewer,
+  viewer: initialViewer,
   onBox,
   onCancel,
   onActive,
@@ -35,6 +35,7 @@ export function initImageryBoxTool({
   pickWorld = pickWorldFromScreen,
   documentRef = globalThis.document,
 } = {}) {
+  let viewer = initialViewer;
   if (!viewer?.scene || typeof onBox !== 'function') return null;
 
   let active = false;
@@ -271,6 +272,24 @@ export function initImageryBoxTool({
     cancel,
     isActive() {
       return active;
+    },
+    async rebindViewer(next) {
+      if (destroyed || !next) return;
+      if (active) setActive(false);
+      try {
+        await attaching;
+      } catch {
+        // The preview source may never have attached.
+      }
+      try {
+        viewer.dataSources.remove(dataSource, false);
+      } catch {
+        // The old viewer is already destroyed.
+      }
+      viewer = next;
+      attaching = Promise.resolve(next.dataSources.add(dataSource)).catch(
+        () => null,
+      );
     },
     /** Returns everything; resolves once the preview is detached. */
     destroy() {

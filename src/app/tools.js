@@ -1,3 +1,7 @@
+import {
+  installContextLossListener,
+  recreateBoundViewer,
+} from './webglRecovery.js';
 import { SceneDirector } from '../scenes/director.js';
 import { initAnnotations } from '../annotations/index.js';
 import { initDrawTool } from '../annotations/drawTool.js';
@@ -36,6 +40,10 @@ export function createApplicationTools({
   signal,
   defer,
 }) {
+  const globe = scene.globe || {
+    viewer: scene.viewer,
+    tileset: scene.tileset,
+  };
   const { viewer, tileset, mapStackController, operations } = scene;
   const { styleManager, weatherEffects, cockpitCloudEffects } = controls;
   const { dataManager } = data;
@@ -94,9 +102,11 @@ export function createApplicationTools({
   // panel lives on the right rail, so both belong to the application
   // lifetime. The tileset lets the layer drape while the globe is hidden.
   const recentImagery = dataManager.layers.get('recent-imagery')?.module;
+  let imageryBoxTool = null;
+  let recentPanel = null;
   if (recentImagery) {
     recentImagery.attachTileset(tileset);
-    const imageryBoxTool = initImageryBoxTool({
+    imageryBoxTool = initImageryBoxTool({
       viewer,
       onBox: (box) => recentImagery.setBox(box),
       onCancel: (reason, message, box) => {
@@ -109,14 +119,15 @@ export function createApplicationTools({
     });
     // The readout mounts in its rail body through the layer panel, like the
     // weather readout.
-    data.presentation.attachRecentImagery((container) =>
-      createRecentImageryPanel({
+    data.presentation.attachRecentImagery((container) => {
+      recentPanel = createRecentImageryPanel({
         container,
-        viewer,
+        viewer: globe.viewer,
         layer: recentImagery,
         tool: imageryBoxTool,
-      }),
-    );
+      });
+      return recentPanel;
+    });
     // The live gate's handle (scripts/qa-recent-imagery.mjs).
     const recentImageryHandle = { layer: recentImagery, tool: imageryBoxTool };
     window.__gevRecentImagery = recentImageryHandle;
@@ -135,13 +146,12 @@ export function createApplicationTools({
   installRenderGovernor(viewer);
   // Cesium keeps a turned-off layer's draw commands (and so all its entities)
   // alive in reused per-pass arrays; trim them after each disable.
-  defer(
-    installLayerReleaseTrim({
-      scene: viewer.scene,
-      dataManager,
-      requestRender: governorRequestRender,
-    }),
-  );
+  let removeTrim = installLayerReleaseTrim({
+    scene: viewer.scene,
+    dataManager,
+    requestRender: governorRequestRender,
+  });
+  defer(() => removeTrim());
 
   // Install the explicit scope mask used by the DISPLAY controls.
   installScopeMask(viewer);
@@ -149,12 +159,16 @@ export function createApplicationTools({
 
   // The follow camera recomputes the tracked target's dead-reckon position
   // every frame — tracking anything is a per-frame animation. (perf wave 2)
-  const removeTrackingListener = viewer.trackedEntityChanged.addEventListener(
-    () => {
-      if (viewer.trackedEntity) holdContinuousRender('tracked-entity');
-      else releaseContinuousRender('tracked-entity');
-    },
-  );
+  let removeTracking = () => {};
+  const bindTracking = (target) => {
+    removeTracking();
+    removeTracking =
+      target.trackedEntityChanged?.addEventListener(() => {
+        if (target.trackedEntity) holdContinuousRender('tracked-entity');
+        else releaseContinuousRender('tracked-entity');
+      }) || (() => {});
+  };
+  bindTracking(viewer);
 
   // Hidden-state suspension (perf wave 2): when the window/tab is hidden,
   // stop the default render loop outright — a hidden canvas repaints for
@@ -166,8 +180,9 @@ export function createApplicationTools({
     // visible:false pauses a covered pane, visible:true keeps drawing when the
     // host falsely reports the page hidden (see keepPanelRendering).
     const hidden = isBackgroundWorkSuspended(document);
-    viewer.__gevBackgroundSuspended = hidden;
-    viewer.useDefaultRenderLoop = !hidden;
+    const current = globe.viewer;
+    current.__gevBackgroundSuspended = hidden;
+    current.useDefaultRenderLoop = !hidden;
     cockpitCloudEffects?.setSuspended?.(hidden);
     if (!hidden) {
       data.presentation.flushVisible();
@@ -183,7 +198,7 @@ export function createApplicationTools({
     removeEmbedVisibility();
   });
   defer(() => {
-    removeTrackingListener();
+    removeTracking();
     releaseContinuousRender('tracked-entity');
   });
   // Apply the CURRENT state too — bootstrap can complete while the tab is
@@ -209,7 +224,59 @@ export function createApplicationTools({
   defer(() => {
     if (window.__godsEyeView === debug) delete window.__godsEyeView;
   });
-  const voiceCommands = initGevVoiceCommands({
+  let voiceCommands;
+  const binding = {
+    getViewer: () => globe.viewer,
+    prepare: async () => {
+      scene.releaseViewerInput?.();
+      uninstallRenderGovernor(globe.viewer);
+      removeTrim();
+      removeTrim = () => {};
+      destroyScopeMask();
+      controls.releaseZoom?.();
+      removeTracking();
+      removeTracking = () => {};
+      await dataManager.detachForViewerSwap?.();
+    },
+    createViewer: (info) => scene.createReplacementViewer?.(info),
+    rebind: async (next) => {
+      styleManager.adoptViewer?.(next);
+      sceneDirector.adoptViewer?.(next);
+      await dataManager.attachToViewer?.(next);
+      data.rebindCyberSonar?.(next);
+      cockpitCloudEffects?.adoptViewer?.(next);
+      controls.rebindZoom?.(next);
+      annotations.rebindViewer?.(next, globe.tileset);
+      await drawTool?.rebindViewer?.(next);
+      geoFileImport?.rebindViewer?.(next);
+      await imageryBoxTool?.rebindViewer?.(next);
+      recentImagery?.attachTileset?.(globe.tileset);
+      recentPanel?.rebindViewer?.(next);
+      installRenderGovernor(next);
+      removeTrim = installLayerReleaseTrim({
+        scene: next.scene,
+        dataManager,
+        requestRender: governorRequestRender,
+      });
+      installScopeMask(next);
+      bindTracking(next);
+      voiceCommands?.rebindViewer?.(next);
+      debug.viewer = next;
+      debug.tileset = globe.tileset;
+      syncVisibilitySuspension();
+    },
+  };
+  const recreateViewer = (request) => recreateBoundViewer(binding, request);
+  debug.recreateViewer = recreateViewer;
+  defer(
+    installContextLossListener({
+      windowRef: window,
+      enabled: () => scene.glRecover === true,
+      busy: () => Boolean(binding.inflight),
+      recreateViewer: () => recreateViewer(),
+    }),
+  );
+  voiceCommands = initGevVoiceCommands({
     ...voice,
     floorServices: operations.surface.groundFloor,
     annotationResolver: operations.annotationResolver,
@@ -228,14 +295,15 @@ export function createApplicationTools({
       delete window.__gevVoiceCommands;
   });
   debug.voiceCommands = voiceCommands;
-  defer(
-    installViews({
-      shell: styleManager,
-      viewer,
-      dataManager,
-      run: (name, args) => voiceCommands.runner(name, args, { signal }),
-      signal,
-    }),
-  );
+  const removeViews = installViews({
+    shell: styleManager,
+    viewer,
+    getViewer: () => globe.viewer,
+    recreateViewer: () => recreateViewer(),
+    dataManager,
+    run: (name, args) => voiceCommands.runner(name, args, { signal }),
+    signal,
+  });
+  defer(removeViews);
   return { sceneDirector, annotations, voiceCommands };
 }

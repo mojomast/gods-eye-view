@@ -131,6 +131,7 @@ export class SceneDirector {
     };
     this._cameraHandoffUnsubscribe =
       styleManager.subscribeCameraHandoff?.(yieldCamera);
+    this._yieldCamera = yieldCamera;
     const canvas = viewer.scene?.canvas;
     for (const event of ['pointerdown', 'wheel'])
       canvas?.addEventListener(event, yieldCamera, { passive: true });
@@ -233,6 +234,24 @@ export class SceneDirector {
         if (!scene?.releaseLayerIds?.includes(change.layerId)) return;
         this.stopScene(msg('Scene layer turned off'));
       });
+  }
+
+  /** Point scene playback at a replacement viewer. */
+  adoptViewer(viewer) {
+    try {
+      this._removeCameraInput?.();
+    } catch {
+      // The old canvas is already gone.
+    }
+    this.viewer = viewer;
+    const canvas = viewer.scene?.canvas;
+    const yieldCamera = this._yieldCamera;
+    for (const event of ['pointerdown', 'wheel'])
+      canvas?.addEventListener(event, yieldCamera, { passive: true });
+    this._removeCameraInput = () => {
+      for (const event of ['pointerdown', 'wheel'])
+        canvas?.removeEventListener(event, yieldCamera);
+    };
   }
 
   _trackWork(promise) {
