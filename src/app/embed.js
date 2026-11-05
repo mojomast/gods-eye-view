@@ -6,6 +6,8 @@
  * shows by posting `{ type: 'gev:view', id, view }`; the app applies the view
  * through its own actions and answers `{ type: 'gev:view-applied', id, ok,
  * steps }`. It announces `{ type: 'gev:ready' }` once it can take views.
+ * `{ type: 'gev:visibility', visible }` pauses or resumes rendering, HUD
+ * timers and feed polls. See docs/EMBEDDING.md.
  *
  * Annotations in a share link are drawn once the link has been restored,
  * embedded or not.
@@ -18,6 +20,10 @@ import { annotationsFromParams, createView } from '../view/index.js';
 const EMBED_VIEW_MESSAGE = 'gev:view';
 const EMBED_APPLIED_MESSAGE = 'gev:view-applied';
 const EMBED_READY_MESSAGE = 'gev:ready';
+const EMBED_VISIBILITY_MESSAGE = 'gev:visibility';
+const EMBED_VISIBILITY_APPLIED_MESSAGE = 'gev:visibility-applied';
+const EMBED_CONFIG_MESSAGE = 'gev:config';
+const EMBED_CONFIG_APPLIED_MESSAGE = 'gev:config-applied';
 
 const FOLLOW_LAYERS = {
   aircraft: 'flights',
@@ -46,25 +52,130 @@ export function isEmbeddedInline() {
 }
 
 /**
- * `doc`'s visibility for work that pauses in a hidden page. A panel's host
- * may report it hidden while it is on screen (see keepPanelRendering), so an
- * inline panel always reads as visible.
+ * One host-visibility channel. Tests build their own; the page uses
+ * {@link pageEmbedVisibility}. A message is authoritative: `false` pauses
+ * even when the document looks visible, and `true` keeps working when a host
+ * reports the page hidden while the pane is on screen.
+ */
+export function createEmbedVisibility() {
+  let hostVisibility = null;
+  const visibilityListeners = new Set();
+  const visibilityTargets = new Set();
+  const api = {
+    get host() {
+      return hostVisibility;
+    },
+    setHost(visible) {
+      const next = visible == null ? null : Boolean(visible);
+      if (next === hostVisibility) return false;
+      hostVisibility = next;
+      for (const listener of visibilityListeners) {
+        try {
+          listener();
+        } catch {
+          console.error('Embed visibility listener failed');
+        }
+      }
+      for (const target of visibilityTargets) {
+        for (const listener of target.listeners) {
+          try {
+            listener();
+          } catch {
+            console.error('Embed visibility listener failed');
+          }
+        }
+      }
+      return true;
+    },
+    subscribe(listener) {
+      if (typeof listener !== 'function')
+        throw new TypeError('Expected a visibility listener');
+      visibilityListeners.add(listener);
+      return () => visibilityListeners.delete(listener);
+    },
+    isSuspended(doc = globalThis.document) {
+      if (hostVisibility === false) return true;
+      if (hostVisibility === true) return false;
+      return doc?.hidden === true;
+    },
+    panelAware(doc = globalThis.document) {
+      const listeners = new Set();
+      const target = {
+        listeners,
+        get hidden() {
+          return api.isSuspended(doc);
+        },
+        get visibilityState() {
+          return this.hidden ? 'hidden' : 'visible';
+        },
+        addEventListener(type, listener) {
+          if (type !== 'visibilitychange' || typeof listener !== 'function')
+            return;
+          if (listeners.size === 0)
+            doc?.addEventListener?.('visibilitychange', onDocument);
+          listeners.add(listener);
+          visibilityTargets.add(target);
+        },
+        removeEventListener(_type, listener) {
+          listeners.delete(listener);
+          if (listeners.size === 0) {
+            visibilityTargets.delete(target);
+            doc?.removeEventListener?.('visibilitychange', onDocument);
+          }
+        },
+        disconnectDocument() {
+          doc?.removeEventListener?.('visibilitychange', onDocument);
+          visibilityTargets.delete(target);
+          listeners.clear();
+        },
+      };
+      const onDocument = () => {
+        for (const listener of listeners) listener();
+      };
+      return target;
+    },
+  };
+  return api;
+}
+
+const pageEmbedVisibility = createEmbedVisibility();
+
+/** Last host visibility for this page, or null when the host has not said. */
+export function embedHostVisibility() {
+  return pageEmbedVisibility.host;
+}
+
+/**
+ * Record a host visibility message and notify HUD, feed and render listeners.
+ * `null` clears it so the document's own visibility applies again.
+ * @param {boolean|null} visible
+ * @returns {boolean} Whether the stored value changed.
+ */
+export function setEmbedVisibility(visible) {
+  return pageEmbedVisibility.setHost(visible);
+}
+
+/** Hear host visibility changes. The listener is not invoked immediately. */
+export function subscribeEmbedVisibility(listener) {
+  return pageEmbedVisibility.subscribe(listener);
+}
+
+/**
+ * Whether rendering, HUD timers and feed polls should stop.
+ * The host message wins. With no message, a hidden document pauses, including
+ * an inline embed. A host that falsely reports the page hidden while the pane
+ * is showing posts `{ type: 'gev:visibility', visible: true }`.
+ */
+export function isBackgroundWorkSuspended(doc = globalThis.document) {
+  return pageEmbedVisibility.isSuspended(doc);
+}
+
+/**
+ * `doc`'s visibility for work that pauses in a hidden page, plus host messages.
+ * Listeners hear both `visibilitychange` on `doc` and host messages.
  */
 export function panelAwareVisibility(doc = globalThis.document) {
-  const hidden = () =>
-    (doc.hidden === true || doc.visibilityState === 'hidden') &&
-    !isEmbeddedInline();
-  return {
-    get hidden() {
-      return hidden();
-    },
-    get visibilityState() {
-      return hidden() ? 'hidden' : 'visible';
-    },
-    addEventListener: (type, listener) => doc.addEventListener(type, listener),
-    removeEventListener: (type, listener) =>
-      doc.removeEventListener(type, listener),
-  };
+  return pageEmbedVisibility.panelAware(doc);
 }
 
 // A panel keeps drawing at about this rate when its host stops animation
@@ -91,7 +202,11 @@ function describeError(error) {
  */
 export function keepPanelRendering(
   viewer,
-  { windowRef = globalThis.window, now = () => performance.now() } = {},
+  {
+    windowRef = globalThis.window,
+    now = () => performance.now(),
+    suspended = () => isBackgroundWorkSuspended(windowRef?.document),
+  } = {},
 ) {
   let lastFrame = now();
   let frameRequest = null;
@@ -116,6 +231,7 @@ export function keepPanelRendering(
   const timer = windowRef.setInterval(() => {
     if (
       failed ||
+      suspended() ||
       now() - lastFrame < MISSED_FRAMES_MS ||
       viewer.isDestroyed?.()
     )
@@ -279,14 +395,50 @@ export function installViews({
   };
   // Views apply one at a time, in the order they arrive.
   let queue = ready;
+  const replyOriginFor = (event) =>
+    isEmbeddedInline() || !event.origin || event.origin === 'null'
+      ? '*'
+      : event.origin;
+  const onVisibility = (event) => {
+    if (event.data?.type !== EMBED_VISIBILITY_MESSAGE) return false;
+    if (!isEmbedMessageSource(event, windowRef)) return true;
+    if (typeof event.data.visible !== 'boolean') return true;
+    setEmbedVisibility(event.data.visible);
+    post(
+      {
+        type: EMBED_VISIBILITY_APPLIED_MESSAGE,
+        visible: !isBackgroundWorkSuspended(windowRef.document),
+      },
+      replyOriginFor(event),
+    );
+    return true;
+  };
+  const onLateConfig = (event) => {
+    if (event.data?.type !== EMBED_CONFIG_MESSAGE) return false;
+    if (!isEmbedMessageSource(event, windowRef)) return true;
+    const consumed = windowRef.__GEV_APPLIED_CONFIG_EVENTS__?.has(event);
+    post(
+      consumed
+        ? {
+            type: EMBED_CONFIG_APPLIED_MESSAGE,
+            ok: true,
+            perf: windowRef.__GEV_STARTUP_PERF__ ?? null,
+          }
+        : {
+            type: EMBED_CONFIG_APPLIED_MESSAGE,
+            ok: false,
+            error: 'already-applied',
+          },
+      replyOriginFor(event),
+    );
+    return true;
+  };
   const onMessage = (event) => {
+    if (onVisibility(event) || onLateConfig(event)) return;
     if (event.source !== peer || event.data?.type !== EMBED_VIEW_MESSAGE)
       return;
     const { id = null } = event.data;
-    const replyOrigin =
-      isEmbeddedInline() || !event.origin || event.origin === 'null'
-        ? '*'
-        : event.origin;
+    const replyOrigin = replyOriginFor(event);
     let view;
     try {
       view = createView(event.data.view);
@@ -316,7 +468,13 @@ export function installViews({
       );
     });
   };
+  // The boot script queued messages until now. Own the listener from here.
+  windowRef.__GEV_QUEUE_MESSAGES__ = false;
+  const queued = Array.isArray(windowRef.__GEV_MESSAGE_QUEUE__)
+    ? windowRef.__GEV_MESSAGE_QUEUE__.splice(0)
+    : [];
   windowRef.addEventListener('message', onMessage);
+  for (const event of queued) onMessage(event);
   void ready.then(() => {
     if (!signal?.aborted) post({ type: EMBED_READY_MESSAGE });
   });
@@ -324,4 +482,10 @@ export function installViews({
     stopRendering();
     windowRef.removeEventListener('message', onMessage);
   };
+}
+
+function isEmbedMessageSource(event, windowRef) {
+  const source = event?.source;
+  if (!source || !windowRef) return false;
+  return source === windowRef || source === windowRef.parent;
 }

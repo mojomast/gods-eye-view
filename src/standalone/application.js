@@ -20,10 +20,20 @@ import { createGoogleTokenSource } from '../maps/googleTokens.js';
 let constructed = false;
 
 /** Compose the standalone application once per page. Reload to start again. */
+function firstString(...values) {
+  for (const value of values) {
+    const text = typeof value === 'string' ? value.trim() : '';
+    if (text) return text;
+  }
+  return '';
+}
+
 export function createStandaloneApplication({
-  googleApiKey,
-  cesiumToken,
-  geospatial = {},
+  googleApiKey: configuredGoogleApiKey,
+  cesiumToken: configuredCesiumToken,
+  geospatial: configuredGeospatial = {},
+  mapillaryToken: configuredMapillaryToken,
+  loadConfig,
   voice = {},
   sources = {},
   streetLevelProviders,
@@ -56,6 +66,21 @@ export function createStandaloneApplication({
           applyDocumentTranslations(document);
         }),
       );
+      const runtime =
+        typeof loadConfig === 'function' ? await loadConfig() : null;
+      const googleApiKey = firstString(
+        runtime?.googleMapsApiKey,
+        configuredGoogleApiKey,
+      );
+      const cesiumToken = firstString(
+        runtime?.cesiumIonToken,
+        configuredCesiumToken,
+      );
+      const geospatial = runtime?.geospatial ?? configuredGeospatial;
+      const mapillaryToken = firstString(
+        runtime?.mapillaryToken,
+        configuredMapillaryToken,
+      );
       placeSearch = createStandalonePlaceSearch({
         // The bundled city and landmark data the offline name provider reads.
         // The search package takes it as plain data rather than importing it,
@@ -72,10 +97,12 @@ export function createStandaloneApplication({
         // app's server when it offers them.
         googleTokens: googleApiKey ? null : createGoogleTokenSource(),
         cesiumToken,
+        profile: runtime?.profile ?? null,
         loaderStatus,
       });
       catalog = createStandaloneCatalog({
         sources,
+        mapillaryToken,
         streetLevelProviders,
         nepalBoundaryResolver: (signal) =>
           scene.operations.annotationResolver.resolveRegionRingForQuery(

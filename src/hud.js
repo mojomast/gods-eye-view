@@ -58,7 +58,10 @@ import {
 } from './i18n/index.js';
 import { isRtlLocale } from './i18n/locale.js';
 import { localizeLayerName } from './ui/layerPanel.js';
-import { isEmbeddedInline } from './app/embed.js';
+import {
+  isBackgroundWorkSuspended,
+  subscribeEmbedVisibility,
+} from './app/embed.js';
 import { subscribeSelectedVessel } from './hudReadouts.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
@@ -346,7 +349,12 @@ export class IntelHUD {
     this.viewer.camera.moveStart.addEventListener(this._onCameraMoveStart);
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._offLocale = onLocaleChange(() => this._relocalize());
-    this._startTimers();
+    this._onBackgroundVisibility = () => this._syncBackgroundTimers();
+    document.addEventListener('visibilitychange', this._onBackgroundVisibility);
+    this._removeEmbedVisibility = subscribeEmbedVisibility(
+      this._onBackgroundVisibility,
+    );
+    this._syncBackgroundTimers();
   }
 
   /** Show the HUD's words in the new locale; drop AI text in the old one. */
@@ -431,11 +439,11 @@ export class IntelHUD {
       this._present({ recShown: this._recBlinkState });
     }, 800);
 
-    // Camera-derived data — 4 updates/second (250ms). Skipped in a hidden
-    // page, except an inline panel, whose host may report it hidden while it
-    // is on screen (see keepPanelRendering in app/embed.js).
+    // Camera-derived data — 4 updates/second (250ms). The timers themselves
+    // are cleared while background work is suspended; this check covers a
+    // tick already queued.
     this._updateInterval = setInterval(() => {
-      if (!this._visible || (document.hidden && !isEmbeddedInline())) return;
+      if (!this._visible || isBackgroundWorkSuspended()) return;
       this._updateCameraData();
     }, 250);
 
@@ -1211,13 +1219,38 @@ export class IntelHUD {
     this._markSummaryDirty();
   }
 
+  /** Drop the periodic HUD timers. A hidden page restarts them on show. */
+  _stopPeriodicTimers() {
+    clearInterval(this._timestampInterval);
+    clearInterval(this._recBlinkInterval);
+    clearInterval(this._updateInterval);
+    clearInterval(this._summaryInterval);
+    this._timestampInterval = null;
+    this._recBlinkInterval = null;
+    this._updateInterval = null;
+    this._summaryInterval = null;
+    this._stopSummaryTyping();
+  }
+
+  /** Stop the periodic timers while the page or host says the pane is hidden. */
+  _syncBackgroundTimers() {
+    if (isBackgroundWorkSuspended()) {
+      this._stopPeriodicTimers();
+      return;
+    }
+    if (this._timestampInterval) return;
+    this._startTimers();
+    if (this._visible) this._updateCameraData();
+  }
+
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
-    clearInterval(this._updateInterval);
-    clearInterval(this._recBlinkInterval);
-    clearInterval(this._timestampInterval);
-    clearInterval(this._summaryInterval);
-    clearInterval(this._summaryTypingInterval);
+    this._removeEmbedVisibility?.();
+    document.removeEventListener?.(
+      'visibilitychange',
+      this._onBackgroundVisibility,
+    );
+    this._stopPeriodicTimers();
     this.viewer.camera.moveStart.removeEventListener(this._onCameraMoveStart);
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();

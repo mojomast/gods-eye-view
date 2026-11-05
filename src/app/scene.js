@@ -15,6 +15,7 @@ import {
 } from '../renderGovernor.js';
 import { describeError } from './errors.js';
 import { onLocaleChange, t } from '../i18n/index.js';
+import { applyTilesetPerformance } from './perfProfile.js';
 
 /** Construct the application globe using the caller's local configuration. */
 export async function createApplicationScene({
@@ -22,6 +23,7 @@ export async function createApplicationScene({
   googleApiKey,
   googleTokens = null,
   cesiumToken,
+  profile = null,
   credits,
   MapController = MapStackController,
   mapOptions = {},
@@ -52,6 +54,9 @@ export async function createApplicationScene({
   const viewer = createApplicationViewer({
     container: 'cesiumContainer',
     creditContainer,
+    msaaSamples: profile?.msaaSamples,
+    preserveDrawingBuffer: profile?.preserveDrawingBuffer,
+    targetFrameRate: profile?.targetFrameRate,
   });
   defer(() => {
     uninstallRenderGovernor(viewer);
@@ -79,6 +84,7 @@ export async function createApplicationScene({
   });
   signal.throwIfAborted();
   if (tileset) {
+    defer(applyTilesetPerformance(viewer, tileset, profile));
     viewer.scene.primitives.add(tileset);
     // NOTE: Cesium World Terrain intentionally disabled — conflicts with Google 3D Tiles at high zoom.
     // Google Photorealistic 3D Tiles provide their own terrain/elevation.

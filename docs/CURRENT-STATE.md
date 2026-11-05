@@ -968,10 +968,12 @@ rendered detection set. The legacy manager retains panel helper compatibility;
 registration sealing, restoration order and failed-transition rollback remain
 unchanged.
 
-Polled layer refreshes and the HUD's camera readout pause while the page is
-hidden. An app embedded inline in a panel keeps both running, because the
-panel's host can report the page as hidden while it is on screen. This is the
-same rule the render loop follows (`keepPanelRendering` in `app/embed.js`).
+Polled layer refreshes, HUD timers and the render loop pause while the page is
+hidden, including an app embedded inline. A host that reports the page hidden
+while the pane is on screen posts `{ type: 'gev:visibility', visible: true }`
+to keep them running (`keepPanelRendering` in `app/embed.js` still draws if
+animation frames have stopped). `visible: false` pauses a pane the document
+still calls visible. See `docs/EMBEDDING.md`.
 
 Application scene setup owns request services, terrain/floor caches and annotation
 lookup state. Controls, layers and voice share those owners, and cancellation

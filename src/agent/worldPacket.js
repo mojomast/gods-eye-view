@@ -24,6 +24,13 @@ const NESTED_CONTEXT_RESULT_FIELDS = Object.freeze([
   'contextRollback',
 ]);
 
+function orientationDegrees(radians) {
+  const value = Number(radians);
+  if (!Number.isFinite(value)) return null;
+  const degrees = Cesium.Math.toDegrees(value);
+  return Number.isFinite(degrees) ? degrees : null;
+}
+
 /**
  * Translate context-mode payloads into the public tool vocabulary while
  * retaining the internal id beside each translated field.
@@ -92,6 +99,7 @@ export function activeContactsWindow(dataManager) {
  *
  * This performs no network requests and intentionally mirrors the historical
  * get_current_view_state payload so voice can delegate without behavior drift.
+ * Camera heading, pitch and roll are degrees. `layers` is the enabled set.
  */
 export function getWorldPacket(options = {}) {
   const {
@@ -129,6 +137,11 @@ export function getWorldPacket(options = {}) {
       latitude: Cesium.Math.toDegrees(cartographic.latitude),
       longitude: Cesium.Math.toDegrees(cartographic.longitude),
       heightM: cartographic.height,
+      // Degrees, the same unit fly_to and embed views already use. Null when
+      // the camera has no finite orientation (a partial test double).
+      headingDeg: orientationDegrees(viewer.camera.heading),
+      pitchDeg: orientationDegrees(viewer.camera.pitch),
+      rollDeg: orientationDegrees(viewer.camera.roll),
     },
     style: styleManager?.activeStyle || 'normal',
     context: contextState

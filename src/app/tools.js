@@ -7,7 +7,11 @@ import { applicationPinia } from '../ui/vueRuntime.js';
 import { initImageryBoxTool } from '../ui/imageryBoxTool.js';
 import { createRecentImageryPanel } from '../ui/recentImagery.js';
 import { initGevVoiceCommands } from '../voice/gevRealtime.js';
-import { installViews, isEmbeddedInline } from './embed.js';
+import {
+  installViews,
+  isBackgroundWorkSuspended,
+  subscribeEmbedVisibility,
+} from './embed.js';
 import { installScopeMask, destroyScopeMask } from '../scopeMask.js';
 import { installLayerReleaseTrim } from '../sceneCommandRelease.js';
 import {
@@ -158,9 +162,11 @@ export function createApplicationTools({
   // GPU. Holder/data state is untouched, so return is seamless: restore
   // the loop, refresh the one DOM surface we gated, render a frame.
   const syncVisibilitySuspension = () => {
-    // A panel's host may report it hidden while it is on screen; the panel
-    // keeps drawing itself (see keepPanelRendering in embed.js).
-    const hidden = document.hidden && !isEmbeddedInline();
+    // Document hidden pauses, including an inline embed. A host message wins:
+    // visible:false pauses a covered pane, visible:true keeps drawing when the
+    // host falsely reports the page hidden (see keepPanelRendering).
+    const hidden = isBackgroundWorkSuspended(document);
+    viewer.__gevBackgroundSuspended = hidden;
     viewer.useDefaultRenderLoop = !hidden;
     cockpitCloudEffects?.setSuspended?.(hidden);
     if (!hidden) {
@@ -169,9 +175,13 @@ export function createApplicationTools({
     }
   };
   document.addEventListener('visibilitychange', syncVisibilitySuspension);
-  defer(() =>
-    document.removeEventListener('visibilitychange', syncVisibilitySuspension),
+  const removeEmbedVisibility = subscribeEmbedVisibility(
+    syncVisibilitySuspension,
   );
+  defer(() => {
+    document.removeEventListener('visibilitychange', syncVisibilitySuspension);
+    removeEmbedVisibility();
+  });
   defer(() => {
     removeTrackingListener();
     releaseContinuousRender('tracked-entity');

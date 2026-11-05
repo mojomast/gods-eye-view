@@ -1,5 +1,5 @@
-// The HUD's 250 ms telemetry readout skips ticks in a hidden page, except in
-// an inline panel, whose host may report it hidden while it is on screen.
+// The HUD's periodic timers stop while the page is hidden, including an inline
+// panel. The host resumes them with a visibility message.
 //
 // hud.js imports `mgrs`, which Node's ESM loader cannot read named exports
 // from, so a module hook swaps it for a stub before the import (the same
@@ -28,6 +28,7 @@ registerHooks({
 });
 
 const { IntelHUD } = await import('./hud.js');
+const { setEmbedVisibility } = await import('./app/embed.js');
 
 function installHiddenPage() {
   const { elements, publish } = hudReadouts();
@@ -60,7 +61,7 @@ function installHiddenPage() {
   };
 }
 
-test('the HUD readout pauses in a hidden page but keeps updating in an inline panel', (t) => {
+test('the HUD readout pauses while hidden, including inline, until the host shows it', (t) => {
   t.mock.timers.enable({ apis: ['setInterval'] });
   const page = installHiddenPage();
   let hud;
@@ -72,17 +73,26 @@ test('the HUD readout pauses in a hidden page but keeps updating in an inline pa
     assert.equal(
       page.alt(),
       'ALT: --m   SUN: --° EL',
-      'a hidden page skips the telemetry tick',
+      'a hidden page does not run the telemetry timer',
     );
 
     globalThis.GEV_EMBED_INLINE = true;
     t.mock.timers.tick(250);
+    assert.equal(
+      page.alt(),
+      'ALT: --m   SUN: --° EL',
+      'an inline panel pauses while its document is hidden',
+    );
+
+    setEmbedVisibility(true);
+    t.mock.timers.tick(250);
     assert.match(
       page.alt(),
       /^ALT: 500m/,
-      'an inline panel reported hidden keeps its readout updating',
+      'the host can resume the readout while the document stays hidden',
     );
   } finally {
+    setEmbedVisibility(null);
     delete globalThis.GEV_EMBED_INLINE;
     hud?.destroy();
     page.restore();

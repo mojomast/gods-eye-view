@@ -2,10 +2,14 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   applyView,
+  createEmbedVisibility,
+  embedHostVisibility,
   installViews,
+  isBackgroundWorkSuspended,
   isEmbedded,
   keepPanelRendering,
   panelAwareVisibility,
+  setEmbedVisibility,
 } from './embed.js';
 import { LayerLifecycle } from '../data/lifecycle.js';
 import { createView } from '../view/index.js';
@@ -227,7 +231,7 @@ test('an app loaded inline into a panel page talks through its own window', asyn
   }
 });
 
-test('polled layers keep refreshing in an inline panel its host reports hidden', async (t) => {
+test('polled layers pause when an inline panel is hidden unless the host says it is showing', async (t) => {
   const listeners = new Set();
   const doc = {
     hidden: true,
@@ -240,9 +244,10 @@ test('polled layers keep refreshing in an inline panel its host reports hidden',
   };
   t.mock.timers.enable({ apis: ['setInterval', 'Date'], now: 1000 });
   let updates = 0;
+  const visibility = createEmbedVisibility();
   const manager = new LayerLifecycle(
     {},
-    { visibilityTarget: panelAwareVisibility(doc) },
+    { visibilityTarget: visibility.panelAware(doc) },
   );
   manager.register({
     id: 'flights',
@@ -266,14 +271,33 @@ test('polled layers keep refreshing in an inline panel its host reports hidden',
     const enabled = updates;
     t.mock.timers.tick(1000);
     await settle();
-    t.mock.timers.tick(1000);
-    await settle();
-    assert.equal(updates, enabled + 2, 'the panel keeps polling');
+    assert.equal(
+      updates,
+      enabled,
+      'a hidden document pauses an inline panel too',
+    );
 
-    delete globalThis.GEV_EMBED_INLINE;
+    visibility.setHost(true);
+    t.mock.timers.tick(1000);
+    visibility.setHost(null);
+    await settle();
+    assert.equal(
+      updates,
+      enabled + 1,
+      'the host can keep a hidden document polling',
+    );
+
+    doc.hidden = false;
+    doc.visibilityState = 'visible';
+    visibility.setHost(false);
     t.mock.timers.tick(1000);
     await settle();
-    assert.equal(updates, enabled + 2, 'outside a panel a hidden page pauses');
+    assert.equal(
+      updates,
+      enabled + 1,
+      'a host visible:false pauses a document that looks visible',
+    );
+    visibility.setHost(null);
   } finally {
     delete globalThis.GEV_EMBED_INLINE;
     await manager.destroyAll();
@@ -300,6 +324,96 @@ test('annotations in a link are drawn after it restores, embedded or not', async
   ]);
 });
 
+test('a panel timer does not draw while background work is suspended', () => {
+  let tick = null;
+  const windowRef = {
+    requestAnimationFrame: () => 1,
+    cancelAnimationFrame() {},
+    setInterval: (fn) => ((tick = fn), 1),
+    clearInterval() {},
+    document: { hidden: true },
+  };
+  const drawn = [];
+  const viewer = {
+    resize: () => drawn.push('resize'),
+    render: () => drawn.push('render'),
+  };
+  const stop = keepPanelRendering(viewer, {
+    windowRef,
+    now: () => 1000,
+    suspended: () => true,
+  });
+  tick();
+  assert.deepEqual(drawn, []);
+  stop();
+});
+
+test('a host visibility message pauses background work and is acknowledged', async () => {
+  const posted = [];
+  const parent = {
+    postMessage: (message) => posted.push(message),
+  };
+  const windowRef = new EventTarget();
+  windowRef.parent = parent;
+  windowRef.document = {
+    hidden: false,
+    body: { classList: new Set() },
+  };
+  windowRef.document.body.classList.add = Set.prototype.add;
+  const shell = {
+    initialRestorePromise: Promise.resolve(),
+    setCleanView() {},
+  };
+  try {
+    const remove = installViews({
+      shell,
+      viewer: fakeViewer(),
+      dataManager: fakeLayers(new Set()),
+      run: recorder().run,
+      location: { search: '?embed=1', hash: '' },
+      windowRef,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const event = new Event('message');
+    Object.assign(event, {
+      source: parent,
+      origin: 'https://host.example',
+      data: { type: 'gev:visibility', visible: false },
+    });
+    windowRef.dispatchEvent(event);
+    assert.equal(embedHostVisibility(), false);
+    assert.equal(isBackgroundWorkSuspended(windowRef.document), true);
+    assert.deepEqual(posted.at(-1), {
+      type: 'gev:visibility-applied',
+      visible: false,
+    });
+    const late = new Event('message');
+    Object.assign(late, {
+      source: parent,
+      origin: 'https://host.example',
+      data: { type: 'gev:config', googleMapsApiKey: 'too-late' },
+    });
+    windowRef.dispatchEvent(late);
+    assert.equal(posted.at(-1).error, 'already-applied');
+    const consumed = Object.assign(new Event('message'), {
+      source: parent,
+      origin: 'https://host.example',
+      data: { type: 'gev:config', googleMapsApiKey: 'from-startup' },
+    });
+    windowRef.__GEV_APPLIED_CONFIG_EVENTS__ = new WeakSet([consumed]);
+    windowRef.__GEV_STARTUP_PERF__ = 'embed';
+    windowRef.dispatchEvent(consumed);
+    assert.deepEqual(posted.at(-1), {
+      type: 'gev:config-applied',
+      ok: true,
+      perf: 'embed',
+    });
+    remove();
+  } finally {
+    setEmbedVisibility(null);
+  }
+});
+
 test('a panel keeps drawing from a timer while animation frames stop', () => {
   let clock = 0;
   let tick = null;
@@ -315,7 +429,11 @@ test('a panel keeps drawing from a timer while animation frames stop', () => {
     resize: () => drawn.push('resize'),
     render: () => drawn.push('render'),
   };
-  const stop = keepPanelRendering(viewer, { windowRef, now: () => clock });
+  const stop = keepPanelRendering(viewer, {
+    windowRef,
+    now: () => clock,
+    suspended: () => false,
+  });
   // Frames arrive: the render loop draws, so the timer does nothing.
   clock = 100;
   frame();
@@ -354,7 +472,11 @@ test('a panel reports a render error in full and stops drawing', () => {
   console.error = (...args) => logged.push(args.join(' '));
   try {
     let clock = 0;
-    const stop = keepPanelRendering(viewer, { windowRef, now: () => clock });
+    const stop = keepPanelRendering(viewer, {
+      windowRef,
+      now: () => clock,
+      suspended: () => false,
+    });
     listener(viewer.scene, { name: 'RuntimeError', message: 'worker failed' });
     assert.match(logged[0], /render error: .*"message":"worker failed"/);
     clock = 1000;

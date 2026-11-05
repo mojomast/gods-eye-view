@@ -27,7 +27,7 @@ export { createReferenceSources as createStandaloneReferenceSources } from '../s
 /** Select standalone providers without starting their acquisition. */
 export function createStandaloneLayerSources(
   overrides = {},
-  { createMapTiles = createOpenFreeMapSource } = {},
+  { createMapTiles = createOpenFreeMapSource, mapillaryToken } = {},
 ) {
   if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides))
     throw new TypeError('Source overrides must be an object');
@@ -64,7 +64,10 @@ export function createStandaloneLayerSources(
     weather: createWeatherSource(),
     cyclones: createCycloneSource(),
     mapillary: createMapillarySource({
-      token: import.meta.env?.MAPILLARY_CLIENT_TOKEN || '',
+      token:
+        String(mapillaryToken || '').trim() ||
+        import.meta.env?.MAPILLARY_CLIENT_TOKEN ||
+        '',
     }),
   };
   for (const name of Object.keys(overrides)) {
