@@ -2,10 +2,12 @@
  * Embed mode and views in the running app.
  *
  * With `?embed=1` the app shows only the globe: clean view, with the HUD,
- * welcome and setup prompts hidden. A page that frames it changes what it
- * shows by posting `{ type: 'gev:view', id, view }`; the app applies the view
- * through its own actions and answers `{ type: 'gev:view-applied', id, ok,
- * steps }`. It announces `{ type: 'gev:ready' }` once it can take views.
+ * welcome and setup prompts hidden, unless the host set
+ * `globalThis.GEV_EMBED_FULL_UI` before load. A page that frames it changes
+ * what it shows by posting `{ type: 'gev:view', id, view }`; the app applies
+ * the view through its own actions and answers
+ * `{ type: 'gev:view-applied', id, ok, steps }`. It announces
+ * `{ type: 'gev:ready' }` once it can take views.
  * `{ type: 'gev:visibility', visible }` pauses or resumes rendering, HUD
  * timers and feed polls. See docs/EMBEDDING.md.
  *
@@ -46,6 +48,15 @@ export function isEmbedded(location = globalThis.location) {
     isEmbeddedInline() ||
     new URLSearchParams(location?.search || '').get('embed') === '1'
   );
+}
+
+/**
+ * Whether an embedding page asked for the full app interface instead of the
+ * clean globe: opt-in, set by the page as `globalThis.GEV_EMBED_FULL_UI`
+ * before the app loads (for hosts with room for the app's own controls).
+ */
+export function isEmbeddedFullUi() {
+  return globalThis.GEV_EMBED_FULL_UI === true;
 }
 
 /** Whether a panel page loaded the app into itself. */
@@ -383,8 +394,10 @@ export function installViews({
     });
   if (!isEmbedded(location)) return () => {};
 
-  windowRef.document.body.classList.add('ui-embed');
-  shell.setCleanView?.(true);
+  if (!isEmbeddedFullUi()) {
+    windowRef.document.body.classList.add('ui-embed');
+    shell.setCleanView?.(true);
+  }
   let stopRendering = isEmbeddedInline()
     ? keepPanelRendering(getViewer() || viewer, { windowRef })
     : () => {};
