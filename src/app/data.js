@@ -12,11 +12,14 @@ export function createApplicationData({
   defer,
 }) {
   // Initialize data layer manager
+  const visibilityTarget = panelAwareVisibility(document);
+  defer(() => visibilityTarget.disconnectDocument?.());
   const dataManager = new LayerLifecycle(viewer, {
     allowQaRegistration,
-    // A panel's host may report it hidden while it is on screen; its layers
-    // keep polling (see keepPanelRendering in embed.js).
-    visibilityTarget: panelAwareVisibility(document),
+    // Hidden pages and a host `{ type: 'gev:visibility', visible: false }`
+    // pause polls. visible:true keeps polling when the host reports the
+    // document hidden while the pane is on screen.
+    visibilityTarget,
     getSourceAvailability: catalog?.getSourceAvailability,
   });
   defer(async () => {

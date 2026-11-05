@@ -94,7 +94,7 @@ test('data setup seals the caller catalog before controls can restore and drains
   assert.equal(dataManager.layers.size, 0);
 });
 
-test('data setup keeps layers polling in an inline panel its host reports hidden', async (t) => {
+test('data setup pauses layers in an inline panel whose document is hidden', async (t) => {
   const previous = globalThis.document;
   globalThis.document = {
     hidden: true,
@@ -118,8 +118,12 @@ test('data setup keeps layers polling in an inline panel its host reports hidden
   const visibility = dataManager._visibilityTarget;
   assert.equal(visibility.hidden, true, 'a hidden page pauses outside a panel');
   globalThis.GEV_EMBED_INLINE = true;
-  assert.equal(visibility.hidden, false);
-  assert.equal(visibility.visibilityState, 'visible');
+  assert.equal(
+    visibility.hidden,
+    true,
+    'an inline panel pauses when the document is hidden',
+  );
+  assert.equal(visibility.visibilityState, 'hidden');
   for (const release of releases.reverse()) await release();
 });
 
