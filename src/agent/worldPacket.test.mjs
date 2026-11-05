@@ -222,6 +222,9 @@ const PRE_EXTRACTION_PAYLOAD = {
     latitude: 30.259999999999994,
     longitude: -97.74,
     heightM: 499.99999999901877,
+    headingDeg: 0,
+    pitchDeg: -45,
+    rollDeg: null,
   },
   style: 'night-vision',
   context: {
