@@ -1,0 +1,11 @@
+{
+  "googleMapsApiKey": "YOUR_GOOGLE_MAPS_BROWSER_KEY",
+  "cesiumIonToken": "YOUR_CESIUM_ION_TOKEN",
+  "photonUrl": "https://photon.example.com/api/",
+  "mapillaryToken": "MLY|YOUR_MAPILLARY_CLIENT_TOKEN",
+  "perf": "embed",
+  "tilesCacheMb": 384,
+  "maximumCacheOverflowMb": 128,
+  "targetFrameRate": 30,
+  "msaaSamples": 2
+}

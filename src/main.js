@@ -1,15 +1,25 @@
 import { createStandaloneApplication } from './standalone/application.js';
 import { describeError } from './standalone/errors.js';
 import { t } from './i18n/index.js';
+import { setEmbedVisibility } from './app/embed.js';
+import { loadClientConfig } from './runtimeConfig.js';
 
-// The Vite boundary exposes only undefined, null, or a validated URL.
-const photonSetting = import.meta.env.PHOTON_URL;
-
+// Build-time env is the fallback. config.json, GEV_RUNTIME_CONFIG and a
+// gev:config postMessage override it (see docs/EMBEDDING.md). A visibility
+// message queued before startup pauses work before layers begin polling.
 const application = createStandaloneApplication({
-  googleApiKey: import.meta.env.GOOGLE_MAPS_API_KEY,
-  cesiumToken: import.meta.env.CESIUM_ION_TOKEN,
-  geospatial:
-    photonSetting === undefined ? {} : { endpoints: { photon: photonSetting } },
+  loadConfig: async () => {
+    const config = await loadClientConfig({ env: import.meta.env });
+    if (typeof config.hostVisible === 'boolean')
+      setEmbedVisibility(config.hostVisible);
+    const perf = config.profile
+      ? config.perf === 'embed'
+        ? 'embed'
+        : 'custom'
+      : null;
+    if (globalThis.window) globalThis.window.__GEV_STARTUP_PERF__ = perf;
+    return config;
+  },
   allowQaRegistration: import.meta.env.DEV,
 });
 

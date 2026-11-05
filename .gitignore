@@ -8,6 +8,9 @@ dist
 .env
 .env.*
 !.env.example
+# Runtime client config served beside index.html. public/config.example.json
+# is the tracked template; a real config.json is local and must not be committed.
+public/config.json
 *.log
 screenshots/
 qa-shots/
