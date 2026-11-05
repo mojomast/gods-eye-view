@@ -17,6 +17,47 @@ const VIEWPORT_MAX_PIXELS = 1200 * 900;
 // ~1.08 MP, matches the old 1200px-wide landscape budget
 const VIEWPORT_MAX_ENCODED_BYTES = 200 * 1024;
 
+/**
+ * True when the canvas keeps its pixels after the frame. Unknown contexts
+ * stay on the preserved path. The embed profile creates the context with
+ * this flag false.
+ */
+export function drawingBufferPreserved(viewer) {
+  try {
+    const canvas = viewer?.scene?.canvas;
+    if (!canvas || typeof canvas.getContext !== 'function') return true;
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    const preserved = gl?.getContextAttributes?.()?.preserveDrawingBuffer;
+    if (preserved == null) return true;
+    return preserved !== false;
+  } catch {
+    return true;
+  }
+}
+
+function captureSuspended(viewer) {
+  if (viewer?.__gevBackgroundSuspended) return true;
+  return typeof document !== 'undefined' && document.hidden === true;
+}
+
+/**
+ * Draw one frame and return while its pixels are still readable. Callers
+ * must read the canvas before awaiting. Used when preserveDrawingBuffer is
+ * off, which discards the buffer once the browser composites.
+ */
+export function renderSceneForCapture(viewer) {
+  const scene = viewer?.scene;
+  if (!scene || captureSuspended(viewer)) return false;
+  try {
+    scene.requestRender?.();
+    if (typeof viewer.render === 'function') viewer.render();
+    else scene.render?.(viewer.clock?.currentTime);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function captureViewportImage() {
   const viewer = window.__godsEyeView?.viewer;
   const source =
@@ -27,8 +68,14 @@ export async function captureViewportImage() {
   // capture. The caller labels this image "Current"; a stale preserved
   // frame would feed the model old entities as current context. (perf
   // wave 2 fix)
-  const fresh = await renderFreshCesiumFrame(viewer);
-  if (!fresh) return null;
+  // Without preserveDrawingBuffer the read has to happen in this turn, so
+  // the render cannot be awaited.
+  if (!drawingBufferPreserved(viewer)) {
+    if (!renderSceneForCapture(viewer)) return null;
+  } else {
+    const fresh = await renderFreshCesiumFrame(viewer);
+    if (!fresh) return null;
+  }
 
   // Clamp BOTH dimensions by a total-pixel budget so tall portrait windows are
   // downscaled too (the old width-only clamp let them through — M13).
@@ -132,8 +179,12 @@ async function capturePointerCrop(screenPx) {
   const viewer = window.__godsEyeView?.viewer;
   const source = viewer?.scene?.canvas;
   if (!source?.width || !source?.height || !screenPx) return null;
-  const fresh = await renderFreshPointerFrame(viewer);
-  if (!fresh) return null;
+  if (!drawingBufferPreserved(viewer)) {
+    if (!renderSceneForCapture(viewer)) return null;
+  } else {
+    const fresh = await renderFreshPointerFrame(viewer);
+    if (!fresh) return null;
+  }
   const rect = pointerCropRect({
     x: screenPx.x,
     y: screenPx.y,
@@ -188,7 +239,7 @@ async function capturePointerCrop(screenPx) {
  */
 export async function renderFreshPointerFrame(viewer) {
   if (await renderFreshCesiumFrame(viewer)) return true;
-  if (typeof document !== 'undefined' && document.hidden) return false;
+  if (captureSuspended(viewer)) return false;
   return renderFreshCesiumFrame(viewer);
 }
 
@@ -231,10 +282,10 @@ export function estimateDataUrlBytes(dataUrl) {
 export async function renderFreshCesiumFrame(viewer) {
   const scene = viewer?.scene;
   if (!scene) return false;
-  // While the document is hidden the render loop is suspended — don't
-  // secretly restart rendering for an optional screenshot, and don't pass
-  // the stale preserved frame off as current.
-  if (typeof document !== 'undefined' && document.hidden) return false;
+  // While the document or the embed host says the pane is hidden the render
+  // loop is suspended — don't secretly restart rendering for an optional
+  // screenshot, and don't pass the stale preserved frame off as current.
+  if (captureSuspended(viewer)) return false;
   try {
     // Under the idle render governor a bare scene.render() doesn't
     // necessarily draw — request a frame and await its postRender (bounded),

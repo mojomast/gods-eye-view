@@ -34,6 +34,10 @@ import {
   withToolCatalog,
 } from './gevRealtime.js';
 import { createVoiceCostTracker } from './voiceCost.js';
+import {
+  drawingBufferPreserved,
+  renderSceneForCapture,
+} from './realtimeViewport.js';
 import { createTestVoiceUi } from '../testSupport/voiceUi.mjs';
 
 test('push-to-talk recognizes Space by code or key', () => {
@@ -2835,6 +2839,62 @@ test('isBenignViewportDeleteError is false for non-error payloads and junk', () 
   assert.equal(isBenignViewportDeleteError({ type: 'error' }, new Set()), false);
 });
 
+
+test('a suspended embed yields no fresh frame and does not render', async () => {
+  const originalDocument = globalThis.document;
+  let requested = 0;
+  let rendered = 0;
+  const viewer = {
+    __gevBackgroundSuspended: true,
+    render() {
+      rendered += 1;
+    },
+    scene: {
+      postRender: { addEventListener() { return () => {}; } },
+      requestRender() { requested += 1; },
+    },
+  };
+  try {
+    globalThis.document = { hidden: false };
+    assert.equal(await renderFreshCesiumFrame(viewer), false);
+    assert.equal(renderSceneForCapture(viewer), false);
+    assert.equal(requested, 0);
+    assert.equal(rendered, 0);
+  } finally {
+    globalThis.document = originalDocument;
+  }
+});
+
+test('a capture without preserveDrawingBuffer renders and reads in one turn', () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { hidden: false };
+  const order = [];
+  const viewer = {
+    render() {
+      order.push('render');
+    },
+    scene: {
+      canvas: {
+        getContext() {
+          return { getContextAttributes: () => ({ preserveDrawingBuffer: false }) };
+        },
+      },
+      requestRender() {
+        order.push('request');
+      },
+    },
+  };
+  assert.equal(drawingBufferPreserved(viewer), false);
+  assert.equal(drawingBufferPreserved({ scene: {} }), true);
+  const pixels = (() => {
+    const drew = renderSceneForCapture(viewer);
+    assert.equal(drew, true);
+    order.push('read');
+    return order;
+  })();
+  assert.deepEqual(pixels, ['request', 'render', 'read']);
+  globalThis.document = originalDocument;
+});
 
 test('hidden document yields no fresh frame — capture must not label a stale canvas Current', async () => {
   const originalDocument = globalThis.document;
