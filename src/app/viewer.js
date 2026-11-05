@@ -104,7 +104,11 @@ export function installTrackpadPinchZoom(
 }
 
 /** Cesium.Viewer options of the standard globe viewer. */
-export function applicationViewerOptions(creditContainer) {
+export function applicationViewerOptions(creditContainer, performance = {}) {
+  const msaaSamples = performance.msaaSamples ?? 4;
+  // Unset keeps the buffer, which screenshots read after the frame is done.
+  // The embed profile passes false and reads pixels in the same turn.
+  const preserveDrawingBuffer = performance.preserveDrawingBuffer !== false;
   return {
     timeline: false,
     animation: false,
@@ -122,21 +126,30 @@ export function applicationViewerOptions(creditContainer) {
     // which would also stop CesiumWidget from creating the Sun and Moon.
     skyBox: new StarrySky(),
     creditContainer,
-    msaaSamples: 4,
-    contextOptions: { webgl: { preserveDrawingBuffer: true } },
+    msaaSamples,
+    contextOptions: { webgl: { preserveDrawingBuffer } },
   };
 }
 
 /** Create the standard globe viewer in caller-owned, visible containers. */
-export function createApplicationViewer({ container, creditContainer }) {
+export function createApplicationViewer({
+  container,
+  creditContainer,
+  msaaSamples,
+  preserveDrawingBuffer,
+  targetFrameRate = 60,
+}) {
   if (!container || !creditContainer)
     throw new TypeError('Viewer and credit containers are required');
   const viewer = new Cesium.Viewer(
     container,
-    applicationViewerOptions(creditContainer),
+    applicationViewerOptions(creditContainer, {
+      msaaSamples,
+      preserveDrawingBuffer,
+    }),
   );
   try {
-    viewer.targetFrameRate = 60;
+    viewer.targetFrameRate = targetFrameRate;
     // A phone pinch spans fewer screen pixels than desktop zoom gestures.
     // Keep Cesium's distance-aware zoom and collision limits, with less travel
     // required on touch-first screens. Mouse/trackpad sensitivity stays native.
