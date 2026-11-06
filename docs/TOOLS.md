@@ -164,7 +164,9 @@ an app-only tool with `ui: { visibility: ['app'] }`;
 ### Embed mode
 
 `?embed=1` shows only the globe: clean view, with the HUD, panels, welcome
-and setup prompts hidden; provider attribution stays. A page that frames it
+and setup prompts hidden; provider attribution stays. A host that sets
+`globalThis.GEV_EMBED_FULL_UI = true` before the app loads keeps the full
+interface instead. A page that frames it
 changes the view by posting `{ type: 'gev:view', id, view }` to the frame.
 The app applies it through its own actions (style, map, exactly the view's
 layers, annotations, then the followed entity, retried until its layer has
