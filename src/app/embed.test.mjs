@@ -561,3 +561,103 @@ test('a followed aircraft owns the camera, and cockpit view is entered after it'
     /no cockpit view/,
   );
 });
+
+test('an embedding page can opt in to the full interface', async () => {
+  const parent = { postMessage: () => {} };
+  const windowRef = new EventTarget();
+  windowRef.parent = parent;
+  windowRef.document = { body: { classList: new Set() } };
+  windowRef.document.body.classList.add = Set.prototype.add;
+  const shell = {
+    initialRestorePromise: Promise.resolve(),
+    clean: null,
+    setCleanView(value) {
+      this.clean = value;
+    },
+  };
+  globalThis.GEV_EMBED_FULL_UI = true;
+  try {
+    const remove = installViews({
+      shell,
+      viewer: fakeViewer(),
+      dataManager: fakeLayers(new Set()),
+      run: recorder().run,
+      location: { search: '?embed=1', hash: '' },
+      windowRef,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(shell.clean, null);
+    assert.equal(windowRef.document.body.classList.has('ui-embed'), false);
+    remove();
+  } finally {
+    delete globalThis.GEV_EMBED_FULL_UI;
+  }
+});
+
+test('full interface opt-in still pauses and recreates the viewer', async () => {
+  const posted = [];
+  const parent = {
+    postMessage: (message) => posted.push(message),
+  };
+  const windowRef = new EventTarget();
+  windowRef.parent = parent;
+  windowRef.document = {
+    hidden: false,
+    body: { classList: new Set() },
+  };
+  windowRef.document.body.classList.add = Set.prototype.add;
+  const shell = {
+    initialRestorePromise: Promise.resolve(),
+    clean: null,
+    setCleanView(value) {
+      this.clean = value;
+    },
+  };
+  let recreated = 0;
+  globalThis.GEV_EMBED_FULL_UI = true;
+  try {
+    const remove = installViews({
+      shell,
+      viewer: fakeViewer(),
+      dataManager: fakeLayers(new Set()),
+      run: recorder().run,
+      location: { search: '?embed=1', hash: '' },
+      windowRef,
+      recreateViewer: async () => {
+        recreated += 1;
+        return { id: 'next' };
+      },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(shell.clean, null);
+    const hide = new Event('message');
+    Object.assign(hide, {
+      source: parent,
+      origin: 'https://host.example',
+      data: { type: 'gev:visibility', visible: false },
+    });
+    windowRef.dispatchEvent(hide);
+    assert.equal(isBackgroundWorkSuspended(windowRef.document), true);
+    assert.deepEqual(posted.at(-1), {
+      type: 'gev:visibility-applied',
+      visible: false,
+    });
+    const recreate = new Event('message');
+    Object.assign(recreate, {
+      source: parent,
+      origin: 'https://host.example',
+      data: { type: 'gev:recreate' },
+    });
+    windowRef.dispatchEvent(recreate);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(recreated, 1);
+    assert.deepEqual(posted.at(-1), {
+      type: 'gev:recreate-applied',
+      ok: true,
+    });
+    remove();
+  } finally {
+    delete globalThis.GEV_EMBED_FULL_UI;
+    setEmbedVisibility(null);
+  }
+});

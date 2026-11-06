@@ -204,7 +204,9 @@ The panel runs the app's panel build (`npm run build:panel`, served at
 in Claude Desktop and in the Codex and ChatGPT desktop apps with a local
 server and no HTTPS. `?embed=1` shows the app as the globe alone and takes
 new views from the page that frames it; framing is off unless
-`GEV_EMBED_FRAME_ANCESTORS` allows the framing page. MCP leads with the tools that find
+`GEV_EMBED_FRAME_ANCESTORS` allows the framing page. A host that sets
+`globalThis.GEV_EMBED_FULL_UI = true` before the app loads keeps the full
+interface instead of the clean globe. MCP leads with the tools that find
 what to show. See [tools and the MCP server](TOOLS.md).
 
 Stdio processes from one install share the panel key in
@@ -5640,6 +5642,7 @@ and unreachable upstream (502/504) separately from road geometry.
 ### AI HUD Summary (June 2026)
 
 - HUD `SUMMARY` readout requests a five-word intelligence-style summary from `/api/openai/hud-summary` (model `OPENAI_HUD_SUMMARY_MODEL`, default `gpt-5-nano`, minimal reasoning).
+- `GEV_HUD_SUMMARY_BASE_URL` (optional `GEV_HUD_SUMMARY_API_KEY`, `GEV_HUD_SUMMARY_MODEL`) sends the same summary request to any OpenAI-compatible `/chat/completions` server instead; unset keeps the OpenAI-or-keyless behavior.
 - Input: place/street/nearby-place labels, enabled layers and `feedProvenance`, with layer names as the user sees them; outside English the narration note and per-layer state ids are left out (`overall` carries the state). No model call without a place, street or nearby-place label: the deterministic line is shown.
 - Language: the HUD sends `locale` (part of the dedupe signature); the proxy keeps a shipped locale, English otherwise. Switching language in place drops the reply and aborts the request in flight, so the next tick asks again.
 - Reply: `{summary, feedState}` (`text.format` JSON schema, `feedState` a snapshot state or null). A view that is not nominal needs the matching `feedState`. The HUD adds its own translated tag, state first and layer names last (`STALE | … | LIVE FLIGHTS`), so the warning is never clipped. Outside English a reply falls back when it carries a feed-state id, a translated layer's English name or id, only Latin letters in a non-Latin language, or, with every feed healthy, the UNAVAILABLE word. `get_hud_caption` uses the same check and tag order, in English, and returns `feedState`.

@@ -6,6 +6,11 @@ module runs (the panel build does this). Framing is a separate decision: pages
 are not framable unless `GEV_EMBED_FRAME_ANCESTORS` names the parent. See
 [TOOLS.md](TOOLS.md) for `gev:view`.
 
+Set `globalThis.GEV_EMBED_FULL_UI = true` before the app loads to keep the full
+interface instead of the clean globe. Unset, or any value other than `true`,
+keeps the panels hidden. View messages, visibility, config, and `gev:recreate`
+still apply either way.
+
 Client keys and the embed performance profile can be supplied without rebuilding.
 Build-time `GOOGLE_MAPS_API_KEY`, `CESIUM_ION_TOKEN`, `MAPILLARY_CLIENT_TOKEN`
 and `PHOTON_URL` remain the fallback. Later sources override a field only when
