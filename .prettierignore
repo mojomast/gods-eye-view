@@ -21,6 +21,9 @@ node_modules
 .vite-*
 *.min.js
 
+# Vendored third-party code keeps its upstream formatting
+src/vendor/
+
 # Application views, and panels lifted from them, hold the page markup
 # verbatim; reflowing it changes the DOM
 src/ui/views/*View.vue

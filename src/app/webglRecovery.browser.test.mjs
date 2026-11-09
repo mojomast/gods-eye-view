@@ -137,25 +137,51 @@ function startServer() {
   });
 }
 
+async function resolveChromeExecutable() {
+  const configured = process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (configured) return configured;
+  try {
+    return await puppeteer.executablePath();
+  } catch {
+    return null;
+  }
+}
+
 test(
   'a forced WebGL context loss comes back with the camera kept',
   { timeout: 60_000 },
-  async () => {
-    const server = await startServer();
-    const { port } = server.address();
-    const browser = await puppeteer.launch({
-      headless: true,
-      executablePath:
-        process.env.PUPPETEER_EXECUTABLE_PATH ||
-        (await puppeteer.executablePath()),
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--use-gl=angle',
-        '--use-angle=swiftshader',
-      ],
-    });
+  async (t) => {
+    // Node unit CI sets PUPPETEER_SKIP_DOWNLOAD=1, so Chrome-for-Testing is
+    // absent. Launch then failed after startServer() and left the listener
+    // open, which wedged `node --test` until the job timeout. Skip when the
+    // binary is missing; the Street Level job still exercises headless Chrome.
+    const { access } = await import('node:fs/promises');
+    const executablePath = await resolveChromeExecutable();
+    if (!executablePath) {
+      t.skip('Chrome for Testing is not installed');
+      return;
+    }
     try {
+      await access(executablePath);
+    } catch {
+      t.skip(`Chrome not found at ${executablePath}`);
+      return;
+    }
+
+    const server = await startServer();
+    let browser;
+    try {
+      const { port } = server.address();
+      browser = await puppeteer.launch({
+        headless: true,
+        executablePath,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--use-gl=angle',
+          '--use-angle=swiftshader',
+        ],
+      });
       const page = await browser.newPage();
       const failed = [];
       page.on('pageerror', (error) => failed.push(String(error)));
@@ -182,7 +208,13 @@ test(
           `${key} ${result.before[key]} -> ${result.after[key]}`,
         );
     } finally {
-      await browser.close();
+      if (browser) {
+        try {
+          await browser.close();
+        } catch {
+          // Launch may have left a half-open browser; ignore close errors.
+        }
+      }
       await new Promise((resolve) => server.close(resolve));
     }
   },

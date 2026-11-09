@@ -18,7 +18,36 @@ import { LocalSdrControls } from './localSdrControls.js';
 const coreClasses = (el) =>
   [...el.classList].filter((name) => !name.startsWith('ui-')).join(' ');
 
+let publicSdrFetchStubDepth = 0;
+let publicSdrFetchRoot = null;
+
+function stubPublicSdrDirectory(t) {
+  if (publicSdrFetchStubDepth === 0) publicSdrFetchRoot = globalThis.fetch;
+  publicSdrFetchStubDepth += 1;
+  const stub = async (input, init) => {
+    const url = String(
+      typeof input === 'string' ? input : (input?.url ?? input),
+    );
+    if (url.includes('/api/sdr/')) {
+      return new Response(JSON.stringify({ receivers: [], stale: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return publicSdrFetchRoot.call(globalThis, input, init);
+  };
+  globalThis.fetch = stub;
+  t.after(() => {
+    publicSdrFetchStubDepth -= 1;
+    if (publicSdrFetchStubDepth === 0) {
+      globalThis.fetch = publicSdrFetchRoot;
+      publicSdrFetchRoot = null;
+    }
+  });
+}
+
 function fixture(t) {
+  stubPublicSdrDirectory(t);
   document.body.replaceChildren();
   const host = document.body.appendChild(document.createElement('div'));
   const pinia = createPinia();
@@ -95,7 +124,11 @@ test('the panel renders the presented directory, station, transport and playback
     filter: 'jazz',
   });
   assert.equal(panel.classList.contains('radio-enabled'), true);
-  assert.equal(panel.classList.contains('collapsed'), true, 'chrome keeps its class');
+  assert.equal(
+    panel.classList.contains('collapsed'),
+    true,
+    'chrome keeps its class',
+  );
   assert.equal($('radio-layer-state').className, 'radio-layer-state active');
   assert.equal($('radio-layer-state').textContent, '3/3');
   const enable = $('radio-enable-btn');
@@ -115,9 +148,15 @@ test('the panel renders the presented directory, station, transport and playback
   assert.equal(filter.disabled, false);
   assert.ok(filter.style.color);
   assert.equal($('radio-station-name').textContent, 'KJAZ');
-  assert.equal($('radio-station-meta').textContent, 'Texas · US  /  MP3 · 128 kbps');
+  assert.equal(
+    $('radio-station-meta').textContent,
+    'Texas · US  /  MP3 · 128 kbps',
+  );
   assert.equal($('radio-station-tags').textContent, 'TAGS · jazz · blues');
-  assert.equal($('radio-station-homepage').getAttribute('href'), 'https://example.org/');
+  assert.equal(
+    $('radio-station-homepage').getAttribute('href'),
+    'https://example.org/',
+  );
   assert.equal($('radio-station-homepage').hidden, false);
   const play = $('radio-play-btn');
   assert.equal(play.className, 'active');
@@ -129,7 +168,10 @@ test('the panel renders the presented directory, station, transport and playback
 
   await render({ audioState: 'error', filter: 'all' });
   assert.equal(play.className, '');
-  assert.equal($('radio-playback-state').className, 'radio-playback-state error');
+  assert.equal(
+    $('radio-playback-state').className,
+    'radio-playback-state error',
+  );
   assert.equal($('radio-station-homepage').hasAttribute('href'), false);
   assert.equal($('radio-station-homepage').hidden, true);
   assert.equal(filter.getAttribute('style'), null);
@@ -137,14 +179,23 @@ test('the panel renders the presented directory, station, transport and playback
 
 test('the markup’s tag option stands until the categories first change', async (t) => {
   const { $, render } = fixture(t);
-  await render({ enabled: false, categories: [], filteredCount: 0, stationCount: 0 });
+  await render({
+    enabled: false,
+    categories: [],
+    filteredCount: 0,
+    stationCount: 0,
+  });
   const filter = $('radio-filter');
   assert.equal(filter.options.length, 1);
   assert.equal(filter.options[0].textContent, 'All');
   await render({});
   assert.equal(filter.options.length, 2);
   await render({ categories: [] });
-  assert.equal(filter.options.length, 0, 'categories that empty clear the list');
+  assert.equal(
+    filter.options.length,
+    0,
+    'categories that empty clear the list',
+  );
 });
 
 test('a render puts back the published tag after a refused pick', async (t) => {
@@ -177,7 +228,11 @@ test('a volume the person is dragging is not rewritten; its readout follows the 
 
 test('a Radio lifecycle in transition marks Enable busy without disabling it', async (t) => {
   const { $, render, setLifecycle } = fixture(t);
-  setLifecycle({ lifecycleState: 'enabling', enabled: false, uncertain: false });
+  setLifecycle({
+    lifecycleState: 'enabling',
+    enabled: false,
+    uncertain: false,
+  });
   await render({});
   const enable = $('radio-enable-btn');
   assert.equal(enable.textContent, 'ENABLING');
@@ -190,15 +245,23 @@ test('a Radio lifecycle in transition marks Enable busy without disabling it', a
   await render({});
   assert.equal(enable.textContent, 'RECONCILE');
   assert.equal(enable.getAttribute('aria-busy'), 'false');
-  assert.equal($('radio-panel').classList.contains('lifecycle-uncertain'), true);
-  assert.equal($('radio-playback-state').className, 'radio-playback-state error');
+  assert.equal(
+    $('radio-panel').classList.contains('lifecycle-uncertain'),
+    true,
+  );
+  assert.equal(
+    $('radio-playback-state').className,
+    'radio-playback-state error',
+  );
 });
 
 test('tag options show localized text and names', async (t) => {
   const { $, render } = fixture(t);
   setLocale('zh-CN');
   t.after(() => setLocale('en'));
-  await render({ categories: [{ id: 'all', label: '全部', count: 750, color: '' }] });
+  await render({
+    categories: [{ id: 'all', label: '全部', count: 750, color: '' }],
+  });
   const [option] = $('radio-filter').options;
   assert.equal(option.textContent, '● 全部（750）');
   assert.equal(option.getAttribute('aria-label'), '全部（750）');
@@ -211,14 +274,22 @@ test('a toggle that ends mid-transition does not leave Enable marked idle', asyn
   showRadioEnableBusy.call(owner, true);
   await nextTick();
   assert.equal(enable.getAttribute('aria-busy'), 'true');
-  setLifecycle({ lifecycleState: 'enabling', enabled: false, uncertain: false });
+  setLifecycle({
+    lifecycleState: 'enabling',
+    enabled: false,
+    uncertain: false,
+  });
   await render({});
   // The toggle was refused while the lifecycle is still enabling.
   showRadioEnableBusy.call(owner, false);
   await nextTick();
   assert.equal(enable.getAttribute('aria-busy'), 'false');
   await render({});
-  assert.equal(enable.getAttribute('aria-busy'), 'true', 'the next render reports it');
+  assert.equal(
+    enable.getAttribute('aria-busy'),
+    'true',
+    'the next render reports it',
+  );
   assert.equal(enable.getAttribute('aria-disabled'), 'true');
 });
 
@@ -255,7 +326,11 @@ function sdrReceiver() {
 test('the RTL-SDR card renders what LocalSdrControls presents', async (t) => {
   const { $, owner } = fixture(t);
   const receiver = sdrReceiver();
-  const controls = new LocalSdrControls({ document, receiver, store: owner.store });
+  const controls = new LocalSdrControls({
+    document,
+    receiver,
+    store: owner.store,
+  });
   t.after(() => controls.destroy());
   const frame = () => new Promise((resolve) => setTimeout(resolve, 40));
   await nextTick();
@@ -280,7 +355,11 @@ test('the RTL-SDR card renders what LocalSdrControls presents', async (t) => {
   await frame();
   const panel = $('radio-panel');
   assert.equal(panel.classList.contains('sdr-connected'), true);
-  assert.equal(panel.classList.contains('collapsed'), true, 'chrome keeps its class');
+  assert.equal(
+    panel.classList.contains('collapsed'),
+    true,
+    'chrome keeps its class',
+  );
   assert.equal($('sdr-connection-state').className, 'active');
   assert.equal($('sdr-connect-btn').textContent, 'DISCONNECT');
   assert.equal(coreClasses($('sdr-connect-btn')), 'panel-layer-toggle active');

@@ -22,6 +22,7 @@
     "Ironbow",
     "Landsat 8/9",
     "NVG",
+    "Public SDR",
     "REC",
     "S2 GhostMaps",
     "SQUAWK {code} · {status}",
@@ -129,6 +130,7 @@
     "Pin",
     "Plan",
     "Pop",
+    "Public SDR",
     "Punk",
     "RADAR · {units}",
     "RADIO",
@@ -276,6 +278,7 @@
     "POS: {time}Z",
     "Plan",
     "Pop",
+    "Public SDR",
     "Punk",
     "R&B",
     "RADAR · {units}",
@@ -331,9 +334,9 @@
     "{value} KM",
     "{value} KM/H",
     "{value} KM/S",
-    "≥ {value} MW",
     "ΔE",
     "ΔN",
+    "≥ {value} MW",
     "▲ {frp} MW"
   ],
   "fr": [
@@ -448,6 +451,7 @@
     "Pause",
     "Plan",
     "Pop",
+    "Public SDR",
     "Punk",
     "RADAR · {units}",
     "RADIO",
@@ -616,6 +620,7 @@
     "POS: {time}Z",
     "PRECIP",
     "Pop",
+    "Public SDR",
     "Punk",
     "RADAR · {units}",
     "RADIO",
@@ -691,9 +696,9 @@
     "{value} KM/H",
     "{value} KM/S",
     "{value} conf",
-    "≥ {value} MW",
     "ΔE",
     "ΔN",
+    "≥ {value} MW",
     "▲ {frp} MW"
   ],
   "ja": [
@@ -723,6 +728,7 @@
     "MSG/S",
     "NVG",
     "POS: {time}Z",
+    "Public SDR",
     "REC",
     "S2 GhostMaps",
     "SRC {value}",
@@ -825,6 +831,7 @@
     "PRECIP",
     "Paris",
     "Pop",
+    "Public SDR",
     "Punk",
     "RADAR · {units}",
     "RANGE",
@@ -876,8 +883,8 @@
     "{value} KM/H",
     "{value} KM/S",
     "ΔN",
-    "▲ {frp} MW",
-    "≥ {value} MW"
+    "≥ {value} MW",
+    "▲ {frp} MW"
   ],
   "ru": [
     "AIS: --",
@@ -890,6 +897,7 @@
     "Landsat 8/9",
     "NAV",
     "NVG",
+    "Public SDR",
     "R&B",
     "REC",
     "S2 GhostMaps",
@@ -906,6 +914,7 @@
     "Ironbow",
     "Landsat 8/9",
     "NVG",
+    "Public SDR",
     "REC",
     "S2 GhostMaps",
     "WHOT/BHOT"
@@ -935,6 +944,7 @@
     "Landsat 8/9",
     "MM",
     "NVG",
+    "Public SDR",
     "REC",
     "S2 GhostMaps",
     "S2 · {name}",
@@ -963,9 +973,9 @@
     "{type}  SPD: {speed}  HDG: {heading}",
     "{value} KM",
     "{value} KM/S",
-    "≥ {value} MW",
     "ΔE",
     "ΔN",
+    "≥ {value} MW",
     "▲ {frp} MW"
   ],
   "zh-Hant": [
@@ -993,10 +1003,11 @@
     "Landsat 8/9",
     "MM",
     "NVG",
+    "Public SDR",
     "REC",
-    "SRC {value}",
     "S2 GhostMaps",
     "S2 · {name}",
+    "SRC {value}",
     "Sentinel-2",
     "Techno",
     "Trance",
@@ -1021,9 +1032,9 @@
     "{type}  SPD: {speed}  HDG: {heading}",
     "{value} KM",
     "{value} KM/S",
-    "≥ {value} MW",
     "ΔE",
     "ΔN",
+    "≥ {value} MW",
     "▲ {frp} MW"
   ]
 }

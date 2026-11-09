@@ -56,7 +56,7 @@ test('the complete Realtime tool payload pins the manifest-generated layer relea
     // area scopes and the osm-places layer; natural-region candidates and the
     // tightened area tool wording follow review.
     // control_cockpit states the own-layer entry rule (Contacts not required).
-    '9522ff6f6d640bede81c51cea6b9601439b08becc5bc20b7355aec24feb17e8d',
+    '69cb948e9439d6ee54389004bf27b53fb6d10c363c8898efc0dfc9cbec890b37',
   );
 });
 

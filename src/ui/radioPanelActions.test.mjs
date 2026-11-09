@@ -9,7 +9,36 @@ import { createPinia } from 'pinia';
 import { useRadioStore } from './stores/radio.js';
 import RadioPanel from './views/panels/RadioPanel.vue';
 
+let publicSdrFetchStubDepth = 0;
+let publicSdrFetchRoot = null;
+
+function stubPublicSdrDirectory(t) {
+  if (publicSdrFetchStubDepth === 0) publicSdrFetchRoot = globalThis.fetch;
+  publicSdrFetchStubDepth += 1;
+  const stub = async (input, init) => {
+    const url = String(
+      typeof input === 'string' ? input : (input?.url ?? input),
+    );
+    if (url.includes('/api/sdr/')) {
+      return new Response(JSON.stringify({ receivers: [], stale: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return publicSdrFetchRoot.call(globalThis, input, init);
+  };
+  globalThis.fetch = stub;
+  t.after(() => {
+    publicSdrFetchStubDepth -= 1;
+    if (publicSdrFetchStubDepth === 0) {
+      globalThis.fetch = publicSdrFetchRoot;
+      publicSdrFetchRoot = null;
+    }
+  });
+}
+
 function mount(t, { filter = (tag) => tag } = {}) {
+  stubPublicSdrDirectory(t);
   document.body.replaceChildren();
   const pinia = createPinia();
   const calls = [];

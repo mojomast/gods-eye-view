@@ -2574,6 +2574,47 @@ function isLikelyWashingtonCoordinate(lat, lon) {
  *
  * @returns {Promise<Array<object>>} Normalized camera source objects.
  */
+/**
+ * Windows-1252 punctuation in 0x80–0x9F. Some Node builds (including the CLI
+ * here) expose `TextDecoder('windows-1252')` as Latin-1 and leave these as
+ * control characters; map them explicitly so titles are stable everywhere.
+ */
+const WINDOWS_1252_CONTROLS = Object.freeze({
+  '\u0080': '\u20ac',
+  '\u0082': '\u201a',
+  '\u0083': '\u0192',
+  '\u0084': '\u201e',
+  '\u0085': '\u2026',
+  '\u0086': '\u2020',
+  '\u0087': '\u2021',
+  '\u0088': '\u02c6',
+  '\u0089': '\u2030',
+  '\u008a': '\u0160',
+  '\u008b': '\u2039',
+  '\u008c': '\u0152',
+  '\u008e': '\u017d',
+  '\u0091': '\u2018',
+  '\u0092': '\u2019',
+  '\u0093': '\u201c',
+  '\u0094': '\u201d',
+  '\u0095': '\u2022',
+  '\u0096': '\u2013',
+  '\u0097': '\u2014',
+  '\u0098': '\u02dc',
+  '\u0099': '\u2122',
+  '\u009a': '\u0161',
+  '\u009b': '\u203a',
+  '\u009c': '\u0153',
+  '\u009e': '\u017e',
+  '\u009f': '\u0178',
+});
+
+function decodeWindows1252(bytes) {
+  return new TextDecoder('windows-1252')
+    .decode(bytes)
+    .replace(/[\u0080-\u009f]/g, (char) => WINDOWS_1252_CONTROLS[char] ?? char);
+}
+
 export async function loadWsdotSourcesFromOpenData() {
   try {
     const resp = await fetch(WSDOT_CAMERAS_URL, {
@@ -2600,7 +2641,7 @@ export async function loadWsdotSourcesFromOpenData() {
       return discard();
     }
     const payload = JSON.parse(
-      new TextDecoder('windows-1252').decode(
+      decodeWindows1252(
         await readResponseBytesCapped(resp, WSDOT_MAX_CATALOG_BYTES),
       ),
     );
