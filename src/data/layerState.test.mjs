@@ -243,7 +243,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   for (const [id, token] of Object.entries(LEGACY_LAYER_STATE_TOKENS)) {
     assert.equal(LAYER_STATE_TOKEN_RESERVATIONS[id], token);
   }
-  assert.equal(nextLayerStateToken(), '9');
+  assert.equal(nextLayerStateToken(), '00');
   assert.equal(
     nextLayerStateToken({
       ...LAYER_STATE_TOKEN_RESERVATIONS,
@@ -256,7 +256,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
     ...LAYER_STATE_TOKEN_RESERVATIONS,
     ...Object.fromEntries([...'9'].map((digit) => [`prior-${digit}`, digit])),
   };
-  assert.equal(nextLayerStateToken(digitsExhausted), '01');
+  assert.equal(nextLayerStateToken(digitsExhausted), '00');
   assert.equal(
     nextLayerStateToken({ ...digitsExhausted, retired: '00', used: '01' }),
     '02',
@@ -306,7 +306,7 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
   assert.equal(
     validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
       ...LAYER_STATE_TOKEN_RESERVATIONS,
-      future: '9',
+      future: '00',
       next: '01',
     }),
     true,
@@ -315,33 +315,33 @@ test('production registry is exact, canonical, and rejects incomplete contracts'
     () =>
       validateLayerStateAllocations(LAYER_STATE_TOKEN_RESERVATIONS, {
         ...LAYER_STATE_TOKEN_RESERVATIONS,
-        future: '00',
+        future: '01',
       }),
-    /next free token 9/,
+    /next free token 00/,
   );
   const beforeLastDigit = { ...digitsExhausted };
   delete beforeLastDigit['prior-9'];
   assert.equal(
     validateLayerStateAllocations(beforeLastDigit, {
       ...beforeLastDigit,
-      futurePair: '01',
-      futureDigit: '9',
+      futurePair: '00',
+      futureDigit: '01',
     }),
     true,
   );
   assert.equal(
     validateLayerStateAllocations(digitsExhausted, {
       ...digitsExhausted,
-      pairB: '01',
-      pairA: '02',
+      pairB: '00',
+      pairA: '01',
     }),
     true,
   );
   assert.throws(
     () =>
       validateLayerStateAllocations(
-        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '9' },
-        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '9', competing: '9' },
+        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '00' },
+        { ...LAYER_STATE_TOKEN_RESERVATIONS, merged: '00', competing: '00' },
       ),
     /next free token 01/,
   );
