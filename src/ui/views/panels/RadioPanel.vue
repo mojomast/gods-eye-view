@@ -8,6 +8,7 @@ import UiSlider from '../../kit/UiSlider.js';
 import { useRadioStore } from '../../stores/radio.js';
 import RadioTuner from './RadioTuner.vue';
 import SdrCard from './SdrCard.vue';
+import PublicSdrCard from './PublicSdrCard.vue';
 import UiButton from '../../kit/UiButton.vue';
 import UiSelect from '../../kit/UiSelect.js';
 
@@ -69,5 +70,6 @@ const radioWords = computed(() => ({
     </div>
     <p class="radio-privacy">{{ t('Audio connects directly to the broadcaster when you press play, choose a station on the globe or ask voice to play. Your IP is visible to that broadcaster.') }}</p>
     <SdrCard />
+    <PublicSdrCard />
 </RailPanel>
 </template>

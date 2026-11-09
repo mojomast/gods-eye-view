@@ -45,3 +45,10 @@ Street Level viewer; the complete resolved dependency inventory remains in
 - Source: <https://github.com/mrdoob/three.js>
 - License: MIT
 - License text: <https://github.com/mrdoob/three.js/blob/dev/LICENSE>
+
+## @fourscore/sdr
+
+- Package: `@fourscore/sdr` 1.1.0 (vendored under `src/vendor/fourscore-sdr/`)
+- Source: <https://www.npmjs.com/package/@fourscore/sdr>
+- License: MIT
+- License text: <https://opensource.org/license/mit>

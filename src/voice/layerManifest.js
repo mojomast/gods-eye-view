@@ -357,6 +357,12 @@ const layers = [
     },
   },
   {
+    id: 'sdr-receivers',
+    aliases: ['sdr receivers', 'public sdr', 'sdr feeds', 'sdr'],
+    context: false,
+    noQuery: 'receiver directory; use the PUBLIC SDR card',
+  },
+  {
     id: 'radio',
     aliases: ['internet radio', 'radio stations'],
     context: false,
