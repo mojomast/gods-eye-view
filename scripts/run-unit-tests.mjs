@@ -77,6 +77,9 @@ export const UNIT_TEST_NODE_FLAGS = Object.freeze([
   '--import=./build/registerVue.js',
 ]);
 
+/** Per-test deadline so a hung test fails with a name instead of wedging CI. */
+export const UNIT_TEST_TIMEOUT_MS = 60_000;
+
 function runTests(args) {
   const result = spawnSync(process.execPath, [...UNIT_TEST_NODE_FLAGS, ...args], {
     cwd: process.cwd(),
@@ -89,7 +92,12 @@ function runTests(args) {
 
 export function runUnitTests() {
   const plan = buildUnitTestPlan(discoverUnitTestFiles());
-  const parallelStatus = runTests(['--test', ...plan.parallel]);
+  const timeoutFlag = `--test-timeout=${UNIT_TEST_TIMEOUT_MS}`;
+  console.log(
+    `[unit] parallel start files=${plan.parallel.length} timeout_ms=${UNIT_TEST_TIMEOUT_MS}`,
+  );
+  const parallelStatus = runTests(['--test', timeoutFlag, ...plan.parallel]);
+  console.log(`[unit] parallel done status=${parallelStatus}`);
   if (parallelStatus !== 0) return parallelStatus;
 
   // The GC-bracketed budgets are calibrated on Node 24 and are meaningless on
@@ -109,9 +117,12 @@ export function runUnitTests() {
     return 0;
   }
   for (const file of plan.serializedAllocations) {
-    const status = runTests(allocationTestArgs(file));
+    console.log(`[unit] allocation start ${file}`);
+    const status = runTests([...allocationTestArgs(file), `--test-timeout=${UNIT_TEST_TIMEOUT_MS}`]);
+    console.log(`[unit] allocation done ${file} status=${status}`);
     if (status !== 0) return status;
   }
+  console.log('[unit] all phases finished');
   return 0;
 }
 

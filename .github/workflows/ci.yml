@@ -16,7 +16,7 @@ jobs:
   verify:
     name: Node ${{ matrix.node }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 12
     strategy:
       fail-fast: false
       matrix:
@@ -54,7 +54,7 @@ jobs:
         run: npm run layer-token:check -- --base-ref origin/main
 
       - name: Run unit tests
-        run: npm test
+        run: stdbuf -oL -eL npm test
 
       - name: Build production bundle
         run: npm run build
