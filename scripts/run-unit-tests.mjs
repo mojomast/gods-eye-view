@@ -78,7 +78,7 @@ export const UNIT_TEST_NODE_FLAGS = Object.freeze([
 ]);
 
 /** Per-test deadline so a hung test fails with a name instead of wedging CI. */
-export const UNIT_TEST_TIMEOUT_MS = 60_000;
+export const UNIT_TEST_TIMEOUT_MS = 20_000;
 
 function runTests(args) {
   const result = spawnSync(process.execPath, [...UNIT_TEST_NODE_FLAGS, ...args], {
@@ -93,10 +93,21 @@ function runTests(args) {
 export function runUnitTests() {
   const plan = buildUnitTestPlan(discoverUnitTestFiles());
   const timeoutFlag = `--test-timeout=${UNIT_TEST_TIMEOUT_MS}`;
+  // Serialize on CI so a wedged test is named by --test-timeout instead of
+  // stalling the whole parallel pool until the job limit.
+  const concurrency =
+    process.env.CI || process.env.GITHUB_ACTIONS
+      ? ['--test-concurrency=1']
+      : [];
   console.log(
-    `[unit] parallel start files=${plan.parallel.length} timeout_ms=${UNIT_TEST_TIMEOUT_MS}`,
+    `[unit] parallel start files=${plan.parallel.length} timeout_ms=${UNIT_TEST_TIMEOUT_MS} concurrency=${concurrency[0] || 'default'}`,
   );
-  const parallelStatus = runTests(['--test', timeoutFlag, ...plan.parallel]);
+  const parallelStatus = runTests([
+    '--test',
+    timeoutFlag,
+    ...concurrency,
+    ...plan.parallel,
+  ]);
   console.log(`[unit] parallel done status=${parallelStatus}`);
   if (parallelStatus !== 0) return parallelStatus;
 
