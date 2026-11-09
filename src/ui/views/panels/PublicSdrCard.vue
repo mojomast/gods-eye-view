@@ -183,7 +183,8 @@ function applyDeepLink() {
     // first, then start the stream and the waterfall together.
     if (panels.value?.['radio-panel']?.collapsed === true)
       chrome.act('toggle', 'radio-panel');
-    setTimeout(() => {
+    clearTimeout(deepLinkTimer);
+    deepLinkTimer = setTimeout(() => {
       waterfallOpen.value = wantsWaterfall;
       try {
         audio.play(receiver, {
@@ -249,7 +250,8 @@ function onMapSelect(record, options = {}) {
   }
   if (panels.value?.['radio-panel']?.collapsed === true)
     chrome.act('toggle', 'radio-panel');
-  setTimeout(
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(
     () =>
       document
         .getElementById('public-sdr-card')
@@ -273,6 +275,9 @@ watch(
 );
 
 let panelObserver = null;
+let scrollTimer = null;
+let directoryAbort = null;
+let deepLinkTimer = null;
 
 function onVisibility() {
   if (document.visibilityState === 'hidden') audio.stop();
@@ -301,12 +306,16 @@ onMounted(async () => {
       attributeFilter: ['class'],
     });
   }
+  directoryAbort?.abort();
+  directoryAbort = new AbortController();
   try {
     const response = await fetch(
       '/api/sdr/receivers?playable=1&available=1&limit=500',
+      { signal: directoryAbort.signal },
     );
     if (!response.ok) throw new Error(`Directory returned ${response.status}`);
     const body = await response.json();
+    if (directoryAbort.signal.aborted) return;
     receivers.value = Array.isArray(body?.receivers) ? body.receivers : [];
     loadError.value = receivers.value.length ? null : 'No playable receivers.';
     if (!applyDeepLink()) {
@@ -315,13 +324,20 @@ onMounted(async () => {
     }
     if (body?.stale) loadError.value = 'Directory is stale; showing the last list.';
   } catch (error) {
+    if (directoryAbort?.signal.aborted) return;
     loadError.value = error instanceof Error ? error.message : String(error);
   } finally {
-    loading.value = false;
+    if (!directoryAbort?.signal.aborted) loading.value = false;
   }
 });
 
 onBeforeUnmount(() => {
+  directoryAbort?.abort();
+  directoryAbort = null;
+  clearTimeout(scrollTimer);
+  scrollTimer = null;
+  clearTimeout(deepLinkTimer);
+  deepLinkTimer = null;
   document.removeEventListener('visibilitychange', onVisibility);
   window.removeEventListener('message', onMessage);
   unsubscribeSelection?.();
